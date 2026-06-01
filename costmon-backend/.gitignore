@@ -1,0 +1,13 @@
+# Huwag isama ang mga mabibigat na packages
+node_modules/
+costmon-backend/node_modules/
+costmon-frontend/node_modules/
+
+# Huwag isama ang database file (para hindi ma-overwrite ang data ng iba)
+*.db
+costmon_local.db
+
+# Iba pang hindi kailangan i-upload
+.env
+dist/
+.DS_Store
