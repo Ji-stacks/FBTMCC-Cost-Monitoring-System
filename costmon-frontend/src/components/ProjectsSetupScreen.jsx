@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
-  FolderPlus, 
   Tags, 
   Trash2, 
   Plus, 
@@ -9,7 +8,6 @@ import {
   Save,
   X,
   FileCode,
-  Layers,
   CheckCircle2,
   BarChart3
 } from 'lucide-react';
@@ -63,7 +61,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
         setNewProject({ project_code: '', project_name: '', contract_cost: '', profit_percentage: '20' });
         refreshData();
       }
-    } catch (error) {
+    } catch {
       showMessage('Failed to add project.', 'error');
     } finally {
       setIsSaving(false);
@@ -88,7 +86,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
         setEditingProject(null);
         refreshData();
       }
-    } catch (error) {
+    } catch {
       showMessage('Failed to update project.', 'error');
     } finally {
       setIsSaving(false);
@@ -105,7 +103,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
         setProjectToDelete(null);
         refreshData();
       }
-    } catch (error) {
+    } catch {
       showMessage('Failed to delete project.', 'error');
     } finally {
       setIsSaving(false);
@@ -131,7 +129,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
       } else {
         showMessage('Category already exists.', 'error');
       }
-    } catch (error) {
+    } catch {
       showMessage('Failed to add category.', 'error');
     } finally {
       setIsSaving(false);
@@ -153,7 +151,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
         setCategoryToDelete(null);
         refreshData();
       }
-    } catch (error) {
+    } catch {
       showMessage('Failed to remove category.', 'error');
     } finally {
       setIsSaving(false);

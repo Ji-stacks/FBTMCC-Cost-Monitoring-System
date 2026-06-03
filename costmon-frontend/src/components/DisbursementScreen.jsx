@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Plus, Trash2, FileText, ChevronDown, Filter, X, Lock, Save, Wallet as WalletIcon, LayoutDashboard, Receipt, BarChart3 } from 'lucide-react';
+import { Search, Plus, Trash2, FileText, ChevronDown, Filter, X, Lock, Save, Receipt } from 'lucide-react';
 import SearchableDropdown from './SearchableDropdown';
 import HealthCard from './HealthCard';
 import { API_URL } from '../utils/constants';
 
-export default function DisbursementScreen({ disbursements, refreshData, isLoading, userRole, categories }) {
+export default function DisbursementScreen({ projects, disbursements, refreshData, isLoading, userRole, categories }) {
   const canEdit = userRole === 'encoder';
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -529,13 +529,17 @@ export default function DisbursementScreen({ disbursements, refreshData, isLoadi
                     
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500">Payee <span className="text-red-500">*</span></label>
-                      <input type="text" name="payee" placeholder="Pangalan ng binayaran..." className="w-full p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                      <input type="text" name="payee" placeholder="Name of Payee" className="w-full p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
                         value={headerData.payee} onChange={handleHeaderChange} required />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500">Project Code (#) <span className="text-red-500">*</span></label>
-                      <input type="text" name="project_code" placeholder="Hal. RF-105" className="w-full p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700"
-                        value={headerData.project_code} onChange={handleHeaderChange} required />
+                      <SearchableDropdown
+                        options={projects.map(p => p.project_code)}
+                        value={headerData.project_code}
+                        onChange={(val) => handleHeaderChange({ target: { name: 'project_code', value: val } })}
+                        placeholder="-- Search for Project Code --"
+                      />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500">Date <span className="text-red-500">*</span></label>
@@ -566,10 +570,11 @@ export default function DisbursementScreen({ disbursements, refreshData, isLoadi
                     
                     <div className="space-y-1 md:col-span-2">
                       <label className="text-xs font-semibold text-slate-500">Particulars (Description) <span className="text-red-500">*</span></label>
-                      <input type="text" name="particulars" placeholder="Detalye ng gastos..." className="w-full p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      <input type="text" name="particulars" placeholder="Details..." className="w-full p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                         value={headerData.particulars} onChange={handleHeaderChange} required />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-
+                    1">
                       <label className="text-xs font-semibold text-slate-500">TIN</label>
                       <input type="text" name="tin" placeholder="000-000-000-000" className="w-full p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                         value={headerData.tin} onChange={handleHeaderChange} />
@@ -644,7 +649,7 @@ export default function DisbursementScreen({ disbursements, refreshData, isLoadi
                                 options={categories}
                                 value={line.category}
                                 onChange={(val) => handleLineChange(line.id, 'category', val)}
-                                placeholder="-- Hanapin ang kategorya --"
+                                placeholder="-- Find Category --"
                                 hasError={lineErrors.includes(line.id)}
                                 />
                             </div>
@@ -662,7 +667,7 @@ export default function DisbursementScreen({ disbursements, refreshData, isLoadi
                       ))}
                     </div>
                     <div className="mt-4 pt-3 text-xs text-slate-500 border-t border-slate-100 italic">
-                      * Kapag pinili ang "Labor /SUBCONTRACTOR", awtomatikong magkukuwenta ng 2% para sa EWT Payable.
+                      * If "Labor /SUBCONTRACTOR" is chosen, it will calculate automatically by 2% for the EWT Payable.
                     </div>
                   </div>
 
