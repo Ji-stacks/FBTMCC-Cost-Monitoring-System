@@ -1,45 +1,60 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   FileSpreadsheet, 
-  Search, 
   TrendingUp, 
   AlertCircle, 
   CheckCircle2, 
   Wallet,
   Calendar,
-  Layers,
   Receipt
 } from 'lucide-react';
+import SearchableDropdown from './SearchableDropdown';
 
 export default function CostMonitoringScreen({ projects, disbursements, onUpdateProject, initialProjectId }) {
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId || projects[0]?.id || '');
-  
-  // Local state for editable fields to ensure snappy UI
-  const [editingValues, setEditingValues] = useState({});
+  const [prevInitialProjectId, setPrevInitialProjectId] = useState(initialProjectId);
 
-  useEffect(() => {
+  if (initialProjectId !== prevInitialProjectId) {
+    setPrevInitialProjectId(initialProjectId);
     if (initialProjectId) {
       setSelectedProjectId(initialProjectId);
     }
-  }, [initialProjectId]);
+  }
 
   const project = useMemo(() => 
     projects.find(p => p.id === selectedProjectId), 
     [projects, selectedProjectId]
   );
 
-  // Initialize editing values when project changes
-  useEffect(() => {
+  // Local state for editable fields to ensure snappy UI
+  const [editingValues, setEditingValues] = useState(() => {
+    const p = projects.find(item => item.id === (initialProjectId || projects[0]?.id || ''));
+    if (p) {
+      return {
+        contract_cost: p.contract_cost || 0,
+        profit_percentage: p.profit_percentage || 0.20,
+        project_area: p.project_area || '',
+        project_start: p.project_start || '',
+        days_end: p.days_end || ''
+      };
+    }
+    return {};
+  });
+
+  const [prevSelectedProjectId, setPrevSelectedProjectId] = useState(selectedProjectId);
+
+  if (selectedProjectId !== prevSelectedProjectId) {
+    setPrevSelectedProjectId(selectedProjectId);
     if (project) {
       setEditingValues({
         contract_cost: project.contract_cost || 0,
-        profit_percentage: project.profit_percentage || 0.20, // Default 20%
+        profit_percentage: project.profit_percentage || 0.20,
         project_area: project.project_area || '',
         project_start: project.project_start || '',
         days_end: project.days_end || ''
       });
     }
-  }, [project]);
+  }
 
   const handleInputChange = (field, value) => {
     const updatedValues = { ...editingValues, [field]: value };
@@ -102,20 +117,16 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
           </p>
         </div>
 
-        <div className="relative w-full md:w-96 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
-          <select 
-            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 appearance-none focus:outline-none focus:border-blue-500 focus:bg-white transition-all cursor-pointer shadow-sm"
-            value={selectedProjectId} 
-            onChange={e => setSelectedProjectId(e.target.value)}
-          >
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.project_code} — {p.project_name}</option>
-            ))}
-          </select>
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-            <Layers size={18} />
-          </div>
+        <div className="relative w-full md:w-96 z-50">
+          <SearchableDropdown
+            options={projects.map(p => `${p.project_code} — ${p.project_name}`)}
+            value={project ? `${project.project_code} — ${project.project_name}` : ''}
+            onChange={(val) => {
+              const selected = projects.find(p => `${p.project_code} — ${p.project_name}` === val);
+              if (selected) setSelectedProjectId(selected.id);
+            }}
+            placeholder="-- Maghanap ng Project --"
+          />
         </div>
       </header>
 
@@ -263,7 +274,7 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
                     </td>
                   </tr>
                 ) : (
-                  financials.projectExpenses.map((d, index) => (
+                  financials.projectExpenses.map((d) => (
                     <tr key={d.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="px-8 py-5">
                         <div className="text-sm font-bold text-slate-700">{d.date}</div>

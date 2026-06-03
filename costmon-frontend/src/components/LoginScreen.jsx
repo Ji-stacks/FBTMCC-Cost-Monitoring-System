@@ -1,4 +1,4 @@
-import { Wallet, Receipt, BarChart3, LayoutDashboard } from 'lucide-react';
+import { Receipt, BarChart3, LayoutDashboard } from 'lucide-react';
 
 export default function LoginScreen({ onLogin }) {
   return (
@@ -61,7 +61,7 @@ export default function LoginScreen({ onLogin }) {
       </div>
 
       <footer className="mt-16 text-slate-400 text-xs font-bold tracking-widest uppercase">
-        FBTMCC Construction & Business Development Corp. © 2026
+        FBT Marketing and Cosntruction Corp. © 2026
       </footer>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LayoutDashboard, Receipt, BarChart3, Settings, Wallet, UserCircle2, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 // Pag-import ng mga hiniwalay nating components
@@ -22,7 +22,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     try {
       // Parallel fetching for efficiency
@@ -41,13 +41,16 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (userRole) {
-      fetchAllData();
+      const timer = setTimeout(() => {
+        fetchAllData();
+      }, 0);
+      return () => clearTimeout(timer);
     }
-  }, [userRole]);
+  }, [userRole, fetchAllData]);
 
   const handleUpdateProject = (projectId, updatedValues) => {
     // Optimistic UI update
