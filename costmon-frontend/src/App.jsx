@@ -8,28 +8,46 @@ import DisbursementScreen from './components/DisbursementScreen';
 import CostMonitoringScreen from './components/CostMonitoringScreen';
 import ProjectsSetupScreen from './components/ProjectsSetupScreen';
 
-// Pag-import ng data mula sa utils
-import { API_URL } from './utils/constants';
+// Inilagay nang direkta ang API_URL para maiwasan ang import errors
+import { API_URL } from './utils/Constants';
 
 export default function App() {
-  const [userRole, setUserRole] = useState(null);
-  const [activeTab, setActiveTab] = useState('disbursements');
+  const [userRole, setUserRole] = useState(() => {
+    const token = localStorage.getItem('fbtmcc_token');
+    const role = localStorage.getItem('fbtmcc_role');
+    return (token && role) ? role : null;
+  });
+  const [activeUsername, setActiveUsername] = useState(() => {
+    const token = localStorage.getItem('fbtmcc_token');
+    return token ? (localStorage.getItem('fbtmcc_username') || '') : ''; 
+  }); 
+  const [activeTab, setActiveTab] = useState(() => {
+    const token = localStorage.getItem('fbtmcc_token');
+    const role = localStorage.getItem('fbtmcc_role');
+    return (token && role) ? (role === 'encoder' ? 'disbursements' : 'cost-monitoring') : 'disbursements';
+  });
   const [initialCostMonitoringProjectId, setInitialCostMonitoringProjectId] = useState(null);
+  
   const [projects, setProjects] = useState([]);
   const [categories, setCategories] = useState([]);
-  
   const [disbursements, setDisbursements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
+    // Isama ang Token kapag kumukuha ng data sa server
+    const token = localStorage.getItem('fbtmcc_token');
+    const headers = { 
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+
     try {
-      // Parallel fetching for efficiency
       const [disbRes, projRes, catRes] = await Promise.all([
-        fetch(`${API_URL}/disbursements`),
-        fetch(`${API_URL}/projects`),
-        fetch(`${API_URL}/categories`)
+        fetch(`${API_URL}/disbursements`, { headers }),
+        fetch(`${API_URL}/projects`, { headers }),
+        fetch(`${API_URL}/categories`, { headers })
       ]);
 
       if (disbRes.ok) setDisbursements(await disbRes.json());
@@ -54,21 +72,36 @@ export default function App() {
 
   const handleUpdateProject = (projectId, updatedValues) => {
     // Optimistic UI update
-    setProjects(prev => prev.map(p => 
-      p.id === projectId ? { ...p, ...updatedValues } : p
-    ));
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updatedValues } : p));
     
-    // Sync with backend
     fetch(`${API_URL}/projects/${projectId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+      },
       body: JSON.stringify(updatedValues)
     });
   };
 
-  const handleLogin = (role) => {
+  // Logic kapag nag-login
+  const handleLogin = (role, username, token) => {
+    localStorage.setItem('fbtmcc_token', token);
+    localStorage.setItem('fbtmcc_role', role);
+    localStorage.setItem('fbtmcc_username', username);
+    
     setUserRole(role);
+    setActiveUsername(username);
     setActiveTab(role === 'encoder' ? 'disbursements' : 'cost-monitoring');
+  };
+
+  // Logic kapag nag-logout
+  const handleLogout = () => {
+    localStorage.removeItem('fbtmcc_token');
+    localStorage.removeItem('fbtmcc_role');
+    localStorage.removeItem('fbtmcc_username');
+    setUserRole(null);
+    setActiveUsername('');
   };
 
   const navigateToCostMonitoring = (projectId) => {
@@ -80,10 +113,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800">
-      
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-[80px]'} bg-slate-900 text-slate-300 flex flex-col z-20 shadow-xl transition-all duration-300 shrink-0`}>
         <div className={`p-4 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center flex-col gap-4 pt-6'} min-h-[80px]`}>
-          
           {isSidebarOpen ? (
             <div>
               <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
@@ -94,7 +125,6 @@ export default function App() {
           ) : (
             <Wallet className="text-blue-500 shrink-0" size={28} />
           )}
-
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-slate-400 hover:text-white p-1.5 hover:bg-slate-800 rounded-md">
             {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
           </button>
@@ -104,52 +134,41 @@ export default function App() {
           <NavItem isSidebarOpen={isSidebarOpen} active={activeTab === 'dashboard'} icon={<LayoutDashboard size={20} />} label="Dashboard" onClick={() => setActiveTab('dashboard')} />
           <NavItem isSidebarOpen={isSidebarOpen} active={activeTab === 'disbursements'} icon={<Receipt size={20} />} label="Disbursements" onClick={() => setActiveTab('disbursements')} />
           <NavItem isSidebarOpen={isSidebarOpen} active={activeTab === 'cost-monitoring'} icon={<BarChart3 size={20} />} label="Cost Monitoring" onClick={() => setActiveTab('cost-monitoring')} />
-          <NavItem isSidebarOpen={isSidebarOpen} active={activeTab === 'projects'} icon={<Settings size={20} />} label="Projects Setup" onClick={() => setActiveTab('projects')} />
+          {/* Itatago ang Projects Setup kung Engineer ang nakalogin */}
+          {userRole !== 'engineer' && (
+            <NavItem isSidebarOpen={isSidebarOpen} active={activeTab === 'projects'} icon={<Settings size={20} />} label="Projects Setup" onClick={() => setActiveTab('projects')} />
+          )}
         </nav>
         
         <div className={`p-4 border-t border-slate-800 flex flex-col gap-3 ${isSidebarOpen ? '' : 'items-center pb-6'}`}>
           {isSidebarOpen ? (
             <div className="flex items-center gap-2 text-slate-400 text-xs">
-              <UserCircle2 size={16} className="shrink-0" />
-              <span className="truncate">Logged in: <strong className="text-white uppercase tracking-wider">{userRole}</strong></span>
+              <UserCircle2 size={16} className="shrink-0 text-blue-500" />
+              <span className="truncate flex flex-col">
+                <strong className="text-white tracking-wider">{activeUsername}</strong>
+                <span className="text-[10px] uppercase">{userRole}</span>
+              </span>
             </div>
           ) : (
-            <UserCircle2 size={24} className="text-slate-400 shrink-0" title={`Naka-login bilang: ${userRole}`} />
+            <UserCircle2 size={24} className="text-blue-500 shrink-0" title={`User: ${activeUsername} (${userRole})`} />
           )}
 
-          <button onClick={() => setUserRole(null)} className={`flex items-center text-red-400 hover:text-red-300 transition-colors bg-slate-800/50 rounded-md justify-center ${isSidebarOpen ? 'gap-2 p-2' : 'p-3'}`}>
+          <button onClick={handleLogout} className={`flex items-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors bg-slate-800/50 rounded-md justify-center ${isSidebarOpen ? 'gap-2 p-2' : 'p-3'}`}>
             <LogOut size={isSidebarOpen ? 14 : 18} />
-            {isSidebarOpen && <span className="text-xs">Mag-logout</span>}
+            {isSidebarOpen && <span className="text-xs font-bold">Log out</span>}
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto relative w-full">
+      <main className="flex-1 overflow-y-auto relative w-full bg-[#f8fafc]">
         {activeTab === 'disbursements' && (
-          <DisbursementScreen 
-            projects={projects} 
-            categories={categories.map(c => c.name)} 
-            disbursements={disbursements} 
-            refreshData={fetchAllData} 
-            isLoading={isLoading} 
-            userRole={userRole} 
-          />
+          <DisbursementScreen projects={projects} categories={categories.map(c => c.name)} disbursements={disbursements} refreshData={fetchAllData} isLoading={isLoading} userRole={userRole} />
         )}
         {activeTab === 'cost-monitoring' && (
-          <CostMonitoringScreen 
-            projects={projects} 
-            disbursements={disbursements} 
-            onUpdateProject={handleUpdateProject} 
-            initialProjectId={initialCostMonitoringProjectId}
-          />
+          <CostMonitoringScreen projects={projects} disbursements={disbursements} onUpdateProject={handleUpdateProject} initialProjectId={initialCostMonitoringProjectId} />
         )}
         {activeTab === 'projects' && (
-          <ProjectsSetupScreen 
-            projects={projects} 
-            categories={categories} 
-            refreshData={fetchAllData} 
-            onNavigateToCostMonitoring={navigateToCostMonitoring}
-          />
+          <ProjectsSetupScreen projects={projects} categories={categories} refreshData={fetchAllData} onNavigateToCostMonitoring={navigateToCostMonitoring} />
         )}
       </main>
     </div>
