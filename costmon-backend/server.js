@@ -2,14 +2,56 @@ const express = require('express');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const bcrypt = require('bcrypt'); // Bagong import
-const jwt = require('jsonwebtoken'); // Bagong import
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit'); // BAGONG IMPORT
 
 const app = express();
-app.use(cors()); 
+
+// ==========================================
+// 1. SECURITY: HIGPITAN ANG CORS
+// ==========================================
+// Ilagay dito ang IP address ng computer na ginagamit para sa frontend
+app.use(cors({
+  origin: [
+    'http://localhost:5173', 
+    'http://127.0.0.1:5173',
+   'http://192.168.2.124:5173'
+    // 'http://192.168.1.15:5173' // Pwede mong tanggalin ang comment (//) at ilagay ang exact IP ng PC mo rito
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
+
 app.use(express.json());
 
-const JWT_SECRET = 'FBTMCC_SUPER_SECRET_KEY_2026'; // Secret key para sa session
+const JWT_SECRET = 'FBTMCC_SUPER_SECRET_KEY_2026';
+
+// ==========================================
+// 2. SECURITY: RATE LIMITING (Iwas Brute-Force)
+// ==========================================
+// Limitahan sa 5 maling attempt kada 15 minuto
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 5, 
+  message: { error: "Masyadong maraming maling login. Subukan ulit mamaya." }
+});
+
+// ==========================================
+// 3. SECURITY: JWT MIDDLEWARE (Taga-check ng Token)
+// ==========================================
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Kunin ang token mula sa "Bearer <token>"
+
+  if (!token) return res.status(401).json({ error: "Access Denied. Walang valid na token." });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: "Invalid o Expired na ang session mo. Mag-login ulit." });
+    req.user = user; // Ipasa ang user info sa susunod na function
+    next();
+  });
+};
 
 const dbPath = path.resolve(__dirname, 'costmon_local.db');
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -18,12 +60,10 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 db.serialize(() => {
-  // Existing Tables
   db.run(`CREATE TABLE IF NOT EXISTS disbursements (id TEXT PRIMARY KEY, project_code TEXT, date TEXT, payee TEXT, particulars TEXT, tin TEXT, cv_no TEXT, check_no TEXT, or_inv_no TEXT, accts_pay REAL, input_tax REAL, output_tax REAL, target_cib REAL, gross_amount REAL, ewt_amount REAL, net_amount REAL, expenses_json TEXT, created_at TEXT)`);
   db.run(`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, project_code TEXT UNIQUE, project_name TEXT, contract_cost REAL DEFAULT 0, profit_percentage REAL DEFAULT 0.20)`);
   db.run(`CREATE TABLE IF NOT EXISTS expense_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)`);
 
-  // BAGONG TABLE: Users
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
@@ -33,7 +73,6 @@ db.serialize(() => {
     security_answer TEXT
   )`);
 
-  // Insert Default Users kung walang laman
   db.get("SELECT count(*) as count FROM users", async (err, row) => {
     if (row && row.count === 0) {
       console.log("Creating default users...");
@@ -54,7 +93,6 @@ db.serialize(() => {
     }
   });
 
-  // Insert Initial Data (Projects & Categories)
   db.get("SELECT count(*) as count FROM projects", (err, row) => {
     if (row && row.count === 0) {
       const initialProjects = [ ['1', 'RF-105', 'Unitop Dasma', 800000, 0.15], ['2', 'W-308', 'Amazing Place QC', 1600000, 0.20], ['3', 'RF-126', 'WM Tanauan', 990000, 0.15], ['4', 'ADMIN', 'Shop/Admin 2026', 0, 0] ];
@@ -75,11 +113,11 @@ db.serialize(() => {
 });
 
 // ==========================================
-// AUTHENTICATION ENDPOINTS (BAGONG API)
+// AUTHENTICATION ENDPOINTS
 // ==========================================
 
-// 1. LOGIN API
-app.post('/api/login', (req, res) => {
+// Inilagay ang loginLimiter dito
+app.post('/api/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
   db.get("SELECT * FROM users WHERE username = ?", [username], async (err, user) => {
     if (err) return res.status(500).json({ error: "Database error." });
@@ -88,14 +126,12 @@ app.post('/api/login', (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: "Mali ang username o password." });
 
-    // Paggawa ng ticket (Token)
     const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SECRET, { expiresIn: '12h' });
     res.json({ success: true, token, role: user.role, username: user.username });
   });
 });
 
-// 2. FORGOT PASSWORD - Kukunin ang tanong
-app.post('/api/forgot-password/question', (req, res) => {
+app.post('/api/forgot-password/question', loginLimiter, (req, res) => {
   db.get("SELECT security_question FROM users WHERE username = ?", [req.body.username], (err, user) => {
     if (err) return res.status(500).json({ error: "Database error." });
     if (!user) return res.status(404).json({ error: "Hindi nahanap ang username na ito." });
@@ -103,8 +139,7 @@ app.post('/api/forgot-password/question', (req, res) => {
   });
 });
 
-// 3. FORGOT PASSWORD - Iche-check ang sagot at mag-reset
-app.post('/api/forgot-password/reset', async (req, res) => {
+app.post('/api/forgot-password/reset', loginLimiter, async (req, res) => {
   const { username, answer, newPassword } = req.body;
   db.get("SELECT * FROM users WHERE username = ?", [username], async (err, user) => {
     if (err) return res.status(500).json({ error: "Database error." });
@@ -121,8 +156,7 @@ app.post('/api/forgot-password/reset', async (req, res) => {
   });
 });
 
-// 4. VERIFY PASSWORD API (Para sa Security Check Modals)
-app.post('/api/verify-password', (req, res) => {
+app.post('/api/verify-password', authenticateToken, (req, res) => {
   const { username, password } = req.body;
   db.get("SELECT password FROM users WHERE username = ?", [username], async (err, user) => {
     if (err) return res.status(500).json({ error: "Database error." });
@@ -136,19 +170,23 @@ app.post('/api/verify-password', (req, res) => {
 });
 
 // ==========================================
-// UMIIRAL NA API ENDPOINTS (Projects, Categories, Disbursements)
+// PROTECTED API ENDPOINTS (Dapat may token bago makapasok)
 // ==========================================
-app.get('/api/projects', (req, res) => { db.all("SELECT * FROM projects ORDER BY project_code ASC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); res.json(rows); }); });
-app.post('/api/projects', (req, res) => { const { id, project_code, project_name, contract_cost, profit_percentage } = req.body; const newId = id || Math.random().toString(36).substr(2, 9); db.run("INSERT INTO projects (id, project_code, project_name, contract_cost, profit_percentage) VALUES (?, ?, ?, ?, ?)", [newId, project_code, project_name, contract_cost || 0, profit_percentage || 0.20], function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, id: newId }); }); });
-app.put('/api/projects/:id', (req, res) => { const { project_code, project_name, contract_cost, profit_percentage } = req.body; let query = "UPDATE projects SET "; let params = []; const fields = []; if (project_code !== undefined) { fields.push("project_code=?"); params.push(project_code); } if (project_name !== undefined) { fields.push("project_name=?"); params.push(project_name); } if (contract_cost !== undefined) { fields.push("contract_cost=?"); params.push(contract_cost); } if (profit_percentage !== undefined) { fields.push("profit_percentage=?"); params.push(profit_percentage); } if (fields.length === 0) return res.json({ success: true, message: "No changes" }); query += fields.join(", ") + " WHERE id=?"; params.push(req.params.id); db.run(query, params, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
-app.delete('/api/projects/:id', (req, res) => { db.run("DELETE FROM projects WHERE id=?", req.params.id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
-app.get('/api/categories', (req, res) => { db.all("SELECT * FROM expense_categories ORDER BY name ASC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); res.json(rows); }); });
-app.post('/api/categories', (req, res) => { db.run("INSERT INTO expense_categories (name) VALUES (?)", [req.body.name], function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, id: this.lastID }); }); });
-app.delete('/api/categories/:id', (req, res) => { db.run("DELETE FROM expense_categories WHERE id=?", req.params.id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
-app.get('/api/disbursements', (req, res) => { db.all("SELECT * FROM disbursements ORDER BY created_at DESC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); const formattedRows = rows.map(row => ({ ...row, expenses: row.expenses_json ? JSON.parse(row.expenses_json) : [] })); res.json(formattedRows); }); });
-app.post('/api/disbursements', (req, res) => { const data = req.body; const stmt = db.prepare(`INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, check_no, or_inv_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`); stmt.run(data.id, data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, message: 'Record saved successfully.' }); }); stmt.finalize(); });
-app.put('/api/disbursements/:id', (req, res) => { const data = req.body; const id = req.params.id; const stmt = db.prepare(`UPDATE disbursements SET project_code=?, date=?, payee=?, particulars=?, tin=?, cv_no=?, check_no=?, or_inv_no=?, accts_pay=?, input_tax=?, output_tax=?, target_cib=?, gross_amount=?, ewt_amount=?, net_amount=?, expenses_json=? WHERE id=?`); stmt.run(data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, message: 'Record updated successfully.' }); }); stmt.finalize(); });
-app.delete('/api/disbursements/:id', (req, res) => { db.run("DELETE FROM disbursements WHERE id=?", req.params.id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
+
+// Ginamit ang authenticateToken sa lahat ng GET, POST, PUT, DELETE
+app.get('/api/projects', authenticateToken, (req, res) => { db.all("SELECT * FROM projects ORDER BY project_code ASC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); res.json(rows); }); });
+app.post('/api/projects', authenticateToken, (req, res) => { const { id, project_code, project_name, contract_cost, profit_percentage } = req.body; const newId = id || Math.random().toString(36).substr(2, 9); db.run("INSERT INTO projects (id, project_code, project_name, contract_cost, profit_percentage) VALUES (?, ?, ?, ?, ?)", [newId, project_code, project_name, contract_cost || 0, profit_percentage || 0.20], function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, id: newId }); }); });
+app.put('/api/projects/:id', authenticateToken, (req, res) => { const { project_code, project_name, contract_cost, profit_percentage } = req.body; let query = "UPDATE projects SET "; let params = []; const fields = []; if (project_code !== undefined) { fields.push("project_code=?"); params.push(project_code); } if (project_name !== undefined) { fields.push("project_name=?"); params.push(project_name); } if (contract_cost !== undefined) { fields.push("contract_cost=?"); params.push(contract_cost); } if (profit_percentage !== undefined) { fields.push("profit_percentage=?"); params.push(profit_percentage); } if (fields.length === 0) return res.json({ success: true, message: "No changes" }); query += fields.join(", ") + " WHERE id=?"; params.push(req.params.id); db.run(query, params, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
+app.delete('/api/projects/:id', authenticateToken, (req, res) => { db.run("DELETE FROM projects WHERE id=?", req.params.id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
+
+app.get('/api/categories', authenticateToken, (req, res) => { db.all("SELECT * FROM expense_categories ORDER BY name ASC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); res.json(rows); }); });
+app.post('/api/categories', authenticateToken, (req, res) => { db.run("INSERT INTO expense_categories (name) VALUES (?)", [req.body.name], function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, id: this.lastID }); }); });
+app.delete('/api/categories/:id', authenticateToken, (req, res) => { db.run("DELETE FROM expense_categories WHERE id=?", req.params.id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
+
+app.get('/api/disbursements', authenticateToken, (req, res) => { db.all("SELECT * FROM disbursements ORDER BY created_at DESC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); const formattedRows = rows.map(row => ({ ...row, expenses: row.expenses_json ? JSON.parse(row.expenses_json) : [] })); res.json(formattedRows); }); });
+app.post('/api/disbursements', authenticateToken, (req, res) => { const data = req.body; const stmt = db.prepare(`INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, check_no, or_inv_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`); stmt.run(data.id, data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, message: 'Record saved successfully.' }); }); stmt.finalize(); });
+app.put('/api/disbursements/:id', authenticateToken, (req, res) => { const data = req.body; const id = req.params.id; const stmt = db.prepare(`UPDATE disbursements SET project_code=?, date=?, payee=?, particulars=?, tin=?, cv_no=?, check_no=?, or_inv_no=?, accts_pay=?, input_tax=?, output_tax=?, target_cib=?, gross_amount=?, ewt_amount=?, net_amount=?, expenses_json=? WHERE id=?`); stmt.run(data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true, message: 'Record updated successfully.' }); }); stmt.finalize(); });
+app.delete('/api/disbursements/:id', authenticateToken, (req, res) => { db.run("DELETE FROM disbursements WHERE id=?", req.params.id, function(err) { if (err) return res.status(500).json({ error: err.message }); res.json({ success: true }); }); });
 
 const PORT = 3001;
 app.listen(PORT, '0.0.0.0', () => { 
