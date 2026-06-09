@@ -4,6 +4,8 @@ import SearchableDropdown from './SearchableDropdown';
 import HealthCard from './HealthCard';
 import PasswordConfirmModal from './PasswordConfirmModal';
 import LoadingOverlay from './LoadingOverlay';
+import UnsavedChangesModal from './UnsavedChangesModal';
+import DraftFoundModal from './DraftFoundModal';
 import { API_URL } from '../utils/Constants';
 
 export default function DisbursementScreen({ projects, disbursements, refreshData, isLoading, userRole, categories }) {
@@ -15,6 +17,10 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
   const [isSaving, setIsSaving] = useState(false);
   const [lineErrors, setLineErrors] = useState([]);
   
+  const [initialFormState, setInitialFormState] = useState(null);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+
   // PASSWORD VERIFICATION STATE
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
 
@@ -36,17 +42,6 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === 'Escape') {
-        if (isModalOpen) closeAndResetModal();
-        if (isFilterOpen) setIsFilterOpen(false);
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, isFilterOpen]);
 
   const availableMonths = useMemo(() => {
     const months = disbursements.map(d => d.date && d.date.substring(0, 7)).filter(Boolean); 
@@ -190,10 +185,103 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
     resetForm();
   };
 
+  const checkUnsavedChanges = () => {
+    if (!initialFormState) return false;
+    return JSON.stringify(headerData) !== initialFormState.headerData || 
+           JSON.stringify(expenseLines) !== initialFormState.expenseLines;
+  };
+
+  const handleCloseRequest = () => {
+    if (checkUnsavedChanges()) {
+      setShowUnsavedModal(true);
+    } else {
+      closeAndResetModal();
+    }
+  };
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        if (isModalOpen && !showUnsavedModal && !showDraftModal) handleCloseRequest();
+        if (isFilterOpen) setIsFilterOpen(false);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, isFilterOpen, showUnsavedModal, showDraftModal, headerData, expenseLines, initialFormState]);
+
+  const handleSaveDraft = () => {
+    localStorage.setItem('disbursement_draft', JSON.stringify({ headerData, expenseLines, editingId }));
+    setShowUnsavedModal(false);
+    closeAndResetModal();
+  };
+
+  const handleDiscardChanges = () => {
+    setShowUnsavedModal(false);
+    closeAndResetModal();
+  };
+
+  const handleRestoreDraft = () => {
+    const draftStr = localStorage.getItem('disbursement_draft');
+    if (draftStr) {
+      const draft = JSON.parse(draftStr);
+      setHeaderData(draft.headerData);
+      setExpenseLines(draft.expenseLines);
+      if (draft.headerData.accts_pay || draft.headerData.input_tax || draft.headerData.output_tax) {
+        setShowTaxFields(true);
+      } else {
+        setShowTaxFields(false);
+      }
+      setEditingId(draft.editingId || null);
+      setInitialFormState({
+        headerData: JSON.stringify(draft.headerData),
+        expenseLines: JSON.stringify(draft.expenseLines)
+      });
+      setShowDraftModal(false);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    localStorage.removeItem('disbursement_draft');
+    setShowDraftModal(false);
+    resetForm();
+    
+    // Set initial state for new form
+    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '' };
+    const initLines = [{ id: Date.now(), category: '', amount: '' }];
+    setHeaderData(initHeader);
+    setExpenseLines(initLines);
+    setInitialFormState({
+      headerData: JSON.stringify(initHeader),
+      expenseLines: JSON.stringify(initLines)
+    });
+    
+    setIsModalOpen(true);
+  };
+
+  const handleNewDisbursement = () => {
+    const hasDraft = !!localStorage.getItem('disbursement_draft');
+    if (hasDraft) {
+      setShowDraftModal(true);
+    } else {
+      resetForm();
+      const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '' };
+      const initLines = [{ id: Date.now(), category: '', amount: '' }];
+      setHeaderData(initHeader);
+      setExpenseLines(initLines);
+      setInitialFormState({
+        headerData: JSON.stringify(initHeader),
+        expenseLines: JSON.stringify(initLines)
+      });
+      setIsModalOpen(true);
+    }
+  };
+
   const handleEditRow = (d) => {
     if (!canEdit) return;
     setEditingId(d.id);
-    setHeaderData({
+    const newHeader = {
       date: d.date || '',
       project_code: d.project_code || '',
       payee: d.payee || '',
@@ -206,19 +294,22 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
       input_tax: d.input_tax || '',
       output_tax: d.output_tax || '',
       target_cib: d.target_cib || d.net_amount || '' 
-    });
+    };
+    setHeaderData(newHeader);
     
-    if (d.expenses && d.expenses.length > 0) {
-      setExpenseLines(d.expenses);
-    } else {
-      setExpenseLines([{ id: 1, category: '', amount: '' }]);
-    }
+    const newLines = d.expenses && d.expenses.length > 0 ? d.expenses : [{ id: 1, category: '', amount: '' }];
+    setExpenseLines(newLines);
 
     if (d.accts_pay || d.input_tax || d.output_tax) {
       setShowTaxFields(true);
     } else {
       setShowTaxFields(false);
     }
+    
+    setInitialFormState({
+      headerData: JSON.stringify(newHeader),
+      expenseLines: JSON.stringify(newLines)
+    });
     
     setErrorMessage('');
     setIsModalOpen(true);
@@ -464,10 +555,7 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
 
             {canEdit && (
               <button 
-                onClick={() => {
-                  resetForm();
-                  setIsModalOpen(true);
-                }}
+                onClick={handleNewDisbursement}
                 className="flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black transition-all shadow-lg shadow-blue-200"
               >
                 <Plus size={20} />
@@ -578,7 +666,7 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
                   </p>
                 </div>
               </div>
-              <button onClick={closeAndResetModal} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-full transition-colors">
+              <button onClick={handleCloseRequest} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-full transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -811,6 +899,19 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
         actionType={passwordModal.action}
         onClose={() => setPasswordModal({ isOpen: false, action: null, payload: null })}
         onConfirm={handlePasswordConfirm}
+      />
+
+      <UnsavedChangesModal
+        isOpen={showUnsavedModal}
+        onClose={() => setShowUnsavedModal(false)}
+        onSaveDraft={handleSaveDraft}
+        onDiscard={handleDiscardChanges}
+      />
+
+      <DraftFoundModal
+        isOpen={showDraftModal}
+        onRestore={handleRestoreDraft}
+        onDiscard={handleDiscardDraft}
       />
 
       {(isSaving || isLoading) && (
