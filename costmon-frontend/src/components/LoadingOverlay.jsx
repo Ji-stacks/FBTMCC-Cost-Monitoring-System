@@ -1,17 +1,18 @@
 import { Loader2 } from 'lucide-react';
 
-export default function LoadingOverlay({ message = 'Loading...', subtext = 'Paki-antay lamang...' }) {
+export default function LoadingOverlay({ message = "Loading...", subtext = "Please wait..." }) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] animate-in fade-in duration-1000">
-      <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center text-center max-w-xs w-full animate-in zoom-in-95 duration-1000 border border-slate-100">
-        <div className="relative mb-6">
-          <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-25"></div>
-          <div className="relative bg-blue-50 p-5 rounded-full text-blue-600">
-            <Loader2 size={40} className="animate-spin" />
-          </div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center max-w-sm w-full mx-4 animate-in zoom-in-95 duration-200">
+        <div className="bg-blue-50 p-4 rounded-full mb-4">
+          <Loader2 size={40} className="text-blue-600 animate-spin" strokeWidth={2.5} />
         </div>
-        <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2 uppercase">{message}</h3>
-        <p className="text-sm text-slate-500 font-medium">{subtext}</p>
+        <h3 className="text-xl font-black text-slate-800 tracking-tight text-center">
+          {message}
+        </h3>
+        <p className="text-sm text-slate-500 font-medium mt-2 text-center">
+          {subtext}
+        </p>
       </div>
     </div>
   );

@@ -140,7 +140,6 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
   const handleLineChange = (id, field, value) => {
     setExpenseLines(lines => lines.map(line => line.id === id ? { ...line, [field]: value } : line));
     
-    // Kapag nakapili na siya ng category, tatanggalin natin ang pula
     if (field === 'category' && value.trim() !== '') {
       setLineErrors(errors => errors.filter(errId => errId !== id));
     }
@@ -179,7 +178,7 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
     setLineErrors([]); 
     setEditingId(null);
   };
-
+  
   const closeAndResetModal = () => {
     setIsModalOpen(false);
     resetForm();
@@ -359,10 +358,11 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
     }
   };
 
-  // --- DITO NAIDAGDAG ANG TOKEN (executeSave) ---
+  // --- IDINAGDAG: TOKEN SA EXECUTE SAVE ---
   const executeSave = async (disbursementData) => {
     setIsSaving(true);
     try {
+      const token = localStorage.getItem('fbtmcc_token'); // <-- KUNIN ANG TOKEN
       const url = editingId ? `${API_URL}/disbursements/${editingId}` : `${API_URL}/disbursements`;
       const method = editingId ? 'PUT' : 'POST';
 
@@ -370,7 +370,7 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
         method: method,
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+          'Authorization': `Bearer ${token}` // <-- IPADALA ANG TOKEN SA HEADER
         },
         body: JSON.stringify(disbursementData)
       });
@@ -395,13 +395,14 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
     setPasswordModal({ isOpen: true, action: 'delete', payload: id });
   };
 
-  // --- DITO NAIDAGDAG ANG TOKEN (executeDelete) ---
+  // --- IDINAGDAG: TOKEN SA EXECUTE DELETE ---
   const executeDelete = async (id) => {
     try {
+      const token = localStorage.getItem('fbtmcc_token'); // <-- KUNIN ANG TOKEN
       const response = await fetch(`${API_URL}/disbursements/${id}`, { 
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+          'Authorization': `Bearer ${token}` // <-- IPADALA ANG TOKEN SA HEADER
         }
       });
       if (response.ok) {
