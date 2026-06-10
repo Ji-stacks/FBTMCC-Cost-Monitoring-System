@@ -236,12 +236,12 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
             <div className="p-8 border-b border-slate-100 bg-indigo-50/30">
               <form onSubmit={(e) => { e.preventDefault(); if (editingProject) { setPasswordModal({ isOpen: true, action: 'update_project', payload: null }); } else { handleAddProject(e); } }} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-1 space-y-1.5 relative">
-                  <label className="text-[10px] font-black text-slate-400 tracking-widest ml-1">Code</label>
+                  <label className="text-[10px] font-black text-slate-600 tracking-widest ml-1 uppercase">Code</label>
                   <input 
-                    className={`w-full px-4 py-3 rounded-xl border font-bold focus:outline-none focus:ring-2 transition-all ${
+                    className={`w-full px-4 py-3 rounded-xl border-2 font-bold focus:outline-none focus:ring-2 transition-all shadow-sm ${
                       projectCodeError 
                         ? 'border-rose-500 bg-rose-50/50 focus:ring-rose-500 text-rose-700' 
-                        : 'border-slate-200 focus:ring-indigo-500'
+                        : 'border-slate-400 focus:ring-indigo-500 bg-white'
                     }`}
                     placeholder="RF-000"
                     value={editingProject ? editingProject.project_code : newProject.project_code}
@@ -268,9 +268,9 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
                   )}
                 </div>
                 <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 tracking-widest ml-1">Project Name</label>
+                  <label className="text-[10px] font-black text-slate-600 tracking-widest ml-1 uppercase">Project Name</label>
                   <input 
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
                     placeholder="Enter site name..."
                     value={editingProject ? editingProject.project_name : newProject.project_name}
                     onChange={(e) => editingProject ? setEditingProject({...editingProject, project_name: e.target.value}) : setNewProject({...newProject, project_name: e.target.value})}
@@ -365,21 +365,24 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
               </span>
             </div>
 
-            <div className="p-6 border-b border-slate-400">
-              <form onSubmit={handleAddCategory} className="flex gap-2">
-                <input 
-                  className="flex-1 px-4 py-3 rounded-xl border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="New Category..."
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  required
-                />
-                <button 
-                  type="submit" 
-                  className="p-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-lg shadow-amber-100 transition-all"
-                >
-                  <Plus size={20} />
-                </button>
+            <div className="p-6 border-b border-slate-400 bg-amber-50/20">
+              <form onSubmit={handleAddCategory} className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-600 tracking-widest ml-1 uppercase">New Category</label>
+                <div className="flex gap-2">
+                  <input 
+                    className="flex-1 px-4 py-3 rounded-xl border-2 border-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white shadow-sm"
+                    placeholder="Enter category name..."
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    required
+                  />
+                  <button 
+                    type="submit" 
+                    className="p-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-lg shadow-amber-100 transition-all"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
               </form>
             </div>
 
