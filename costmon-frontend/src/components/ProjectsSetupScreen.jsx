@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Tags, 
   Trash2, 
@@ -12,6 +12,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import PasswordConfirmModal from './PasswordConfirmModal';
+import LoadingOverlay from './LoadingOverlay';
 import { API_URL } from '../utils/constants';
 
 export default function ProjectsSetupScreen({ projects, categories, refreshData, onNavigateToCostMonitoring }) {
@@ -26,6 +27,17 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
   const [recentlyAddedProject, setRecentlyAddedProject] = useState(null);
   
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (showSuccessModal) setShowSuccessModal(false);
+        if (showCategorySuccessModal) setShowCategorySuccessModal(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showSuccessModal, showCategorySuccessModal]);
 
   const showMessage = (text, type = 'success') => {
     setMessage({ text, type });
@@ -48,7 +60,10 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
     try {
       const response = await fetch(`${API_URL}/projects`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+        },
         body: JSON.stringify({
           ...newProject,
           profit_percentage: parseFloat(newProject.profit_percentage || 20) / 100
@@ -74,7 +89,10 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
     try {
       const response = await fetch(`${API_URL}/projects/${editingProject.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+        },
         body: JSON.stringify({
           ...editingProject,
           profit_percentage: parseFloat(editingProject.profit_percentage) / 100
@@ -96,7 +114,12 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
   const executeDeleteProject = async (project) => {
     setIsSaving(true);
     try {
-      const response = await fetch(`${API_URL}/projects/${project.id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_URL}/projects/${project.id}`, { 
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+        }
+      });
       if (response.ok) {
         showMessage('Project deleted.');
         refreshData();
@@ -116,7 +139,10 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
     try {
       const response = await fetch(`${API_URL}/categories`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+        },
         body: JSON.stringify({ name: newCategory.trim() })
       });
       
@@ -137,7 +163,12 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
   const executeDeleteCategory = async (category) => {
     setIsSaving(true);
     try {
-      const response = await fetch(`${API_URL}/categories/${category.id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_URL}/categories/${category.id}`, { 
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
+        }
+      });
       if (response.ok) {
         showMessage('Category removed.');
         refreshData();
@@ -272,42 +303,42 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
               </form>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto border border-slate-400 rounded-xl shadow-md bg-white">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/50">
-                    <th className="px-8 py-4 text-[10px] font-black text-slate-400 tracking-widest border-b border-slate-100">Code</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 tracking-widest border-b border-slate-100">Project Name</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 tracking-widest border-b border-slate-100 text-right">Contract Cost</th>
-                    <th className="px-8 py-4 text-[10px] font-black text-slate-400 tracking-widest border-b border-slate-100 text-center">Actions</th>
+                  <tr className="bg-slate-100">
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 last:border-r-0 uppercase">Code</th>
+                    <th className="px-6 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 last:border-r-0 uppercase">Project Name</th>
+                    <th className="px-6 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 last:border-r-0 uppercase text-right">Contract Cost</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 last:border-r-0 uppercase text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-slate-400">
                   {projects.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-8 py-4">
-                        <span className="font-black text-indigo-600">{p.project_code}</span>
+                    <tr key={p.id} className="hover:bg-indigo-50/50 transition-colors group">
+                      <td className="px-8 py-4 border-r border-slate-400 last:border-r-0 bg-white group-hover:bg-indigo-50/30">
+                        <span className="font-black text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm">{p.project_code}</span>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-700">{p.project_name}</div>
+                      <td className="px-6 py-4 border-r border-slate-400 last:border-r-0 bg-white group-hover:bg-indigo-50/30">
+                        <div className="font-bold text-slate-800">{p.project_name}</div>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-mono font-bold text-slate-500 text-sm">₱{(p.contract_cost || 0).toLocaleString()}</div>
+                      <td className="px-6 py-4 text-right border-r border-slate-400 last:border-r-0 bg-white group-hover:bg-indigo-50/30">
+                        <div className="font-mono font-black text-slate-700 text-sm">₱{(p.contract_cost || 0).toLocaleString()}</div>
                       </td>
-                      <td className="px-8 py-4">
-                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <td className="px-8 py-4 border-r border-slate-400 last:border-r-0 bg-white group-hover:bg-indigo-50/30">
+                        <div className="flex items-center justify-center gap-2">
                           <button 
                             onClick={() => setEditingProject({
                               ...p, 
                               profit_percentage: (p.profit_percentage * 100).toFixed(0)
                             })}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                            className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-100 border border-indigo-50 rounded-lg transition-colors shadow-sm"
                           >
                             <Settings2 size={18} />
                           </button>
                           <button 
                             onClick={() => setPasswordModal({ isOpen: true, action: 'delete_project', payload: p })}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                            className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-100 border border-rose-50 rounded-lg transition-colors shadow-sm"
                           >
                             <Trash2 size={18} />
                           </button>
@@ -323,18 +354,18 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
 
         {/* CATEGORIES MANAGEMENT (4 COLS) */}
         <section className="lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
-            <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+          <div className="bg-white rounded-[2rem] border border-slate-400 shadow-sm overflow-hidden flex flex-col h-full">
+            <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-400 flex items-center justify-between">
               <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
                 <Tags className="text-amber-500" size={24} />
                 Categories
               </h2>
-              <span className="px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-black text-slate-500 tracking-widest">
+              <span className="px-3 py-1 bg-white border border-slate-400 rounded-full text-xs font-black text-slate-500 tracking-widest">
                 {categories.length}
               </span>
             </div>
 
-            <div className="p-6 border-b border-slate-100">
+            <div className="p-6 border-b border-slate-400">
               <form onSubmit={handleAddCategory} className="flex gap-2">
                 <input 
                   className="flex-1 px-4 py-3 rounded-xl border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -355,7 +386,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
             <div className="flex-1 overflow-y-auto max-h-[600px] p-6">
               <div className="space-y-2">
                 {sortedCategories.map((cat) => (
-                  <div key={cat.id} className="group flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 transition-all">
+                  <div key={cat.id} className="group flex items-center justify-between p-3 rounded-xl border border-slate-300 hover:border-amber-200 hover:bg-amber-50/30 transition-all">
                     <span className="text-sm font-bold text-slate-600">{cat.name}</span>
                     <button 
                       onClick={() => setPasswordModal({ isOpen: true, action: 'delete_category', payload: cat })}
@@ -440,6 +471,13 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
         onClose={() => setPasswordModal({ isOpen: false, action: null, payload: null })}
         onConfirm={handlePasswordConfirm}
       />
+
+      {isSaving && (
+        <LoadingOverlay 
+          message="Updating System" 
+          subtext="Paki-antay habang sine-save ang changes..." 
+        />
+      )}
     </div>
   );
 }

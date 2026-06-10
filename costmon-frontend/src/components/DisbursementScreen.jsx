@@ -3,6 +3,9 @@ import { Search, Plus, Trash2, FileText, ChevronDown, Filter, X, Lock, Save, Rec
 import SearchableDropdown from './SearchableDropdown';
 import HealthCard from './HealthCard';
 import PasswordConfirmModal from './PasswordConfirmModal';
+import LoadingOverlay from './LoadingOverlay';
+import UnsavedChangesModal from './UnsavedChangesModal';
+import DraftFoundModal from './DraftFoundModal';
 import { API_URL } from '../utils/Constants';
 
 export default function DisbursementScreen({ projects, disbursements, refreshData, isLoading, userRole, categories }) {
@@ -14,6 +17,10 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
   const [isSaving, setIsSaving] = useState(false);
   const [lineErrors, setLineErrors] = useState([]);
   
+  const [initialFormState, setInitialFormState] = useState(null);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+
   // PASSWORD VERIFICATION STATE
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
 
@@ -177,10 +184,103 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
     resetForm();
   };
 
+  const checkUnsavedChanges = () => {
+    if (!initialFormState) return false;
+    return JSON.stringify(headerData) !== initialFormState.headerData || 
+           JSON.stringify(expenseLines) !== initialFormState.expenseLines;
+  };
+
+  const handleCloseRequest = () => {
+    if (checkUnsavedChanges()) {
+      setShowUnsavedModal(true);
+    } else {
+      closeAndResetModal();
+    }
+  };
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        if (isModalOpen && !showUnsavedModal && !showDraftModal) handleCloseRequest();
+        if (isFilterOpen) setIsFilterOpen(false);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, isFilterOpen, showUnsavedModal, showDraftModal, headerData, expenseLines, initialFormState]);
+
+  const handleSaveDraft = () => {
+    localStorage.setItem('disbursement_draft', JSON.stringify({ headerData, expenseLines, editingId }));
+    setShowUnsavedModal(false);
+    closeAndResetModal();
+  };
+
+  const handleDiscardChanges = () => {
+    setShowUnsavedModal(false);
+    closeAndResetModal();
+  };
+
+  const handleRestoreDraft = () => {
+    const draftStr = localStorage.getItem('disbursement_draft');
+    if (draftStr) {
+      const draft = JSON.parse(draftStr);
+      setHeaderData(draft.headerData);
+      setExpenseLines(draft.expenseLines);
+      if (draft.headerData.accts_pay || draft.headerData.input_tax || draft.headerData.output_tax) {
+        setShowTaxFields(true);
+      } else {
+        setShowTaxFields(false);
+      }
+      setEditingId(draft.editingId || null);
+      setInitialFormState({
+        headerData: JSON.stringify(draft.headerData),
+        expenseLines: JSON.stringify(draft.expenseLines)
+      });
+      setShowDraftModal(false);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    localStorage.removeItem('disbursement_draft');
+    setShowDraftModal(false);
+    resetForm();
+    
+    // Set initial state for new form
+    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '' };
+    const initLines = [{ id: Date.now(), category: '', amount: '' }];
+    setHeaderData(initHeader);
+    setExpenseLines(initLines);
+    setInitialFormState({
+      headerData: JSON.stringify(initHeader),
+      expenseLines: JSON.stringify(initLines)
+    });
+    
+    setIsModalOpen(true);
+  };
+
+  const handleNewDisbursement = () => {
+    const hasDraft = !!localStorage.getItem('disbursement_draft');
+    if (hasDraft) {
+      setShowDraftModal(true);
+    } else {
+      resetForm();
+      const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '' };
+      const initLines = [{ id: Date.now(), category: '', amount: '' }];
+      setHeaderData(initHeader);
+      setExpenseLines(initLines);
+      setInitialFormState({
+        headerData: JSON.stringify(initHeader),
+        expenseLines: JSON.stringify(initLines)
+      });
+      setIsModalOpen(true);
+    }
+  };
+
   const handleEditRow = (d) => {
     if (!canEdit) return;
     setEditingId(d.id);
-    setHeaderData({
+    const newHeader = {
       date: d.date || '',
       project_code: d.project_code || '',
       payee: d.payee || '',
@@ -193,19 +293,22 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
       input_tax: d.input_tax || '',
       output_tax: d.output_tax || '',
       target_cib: d.target_cib || d.net_amount || '' 
-    });
+    };
+    setHeaderData(newHeader);
     
-    if (d.expenses && d.expenses.length > 0) {
-      setExpenseLines(d.expenses);
-    } else {
-      setExpenseLines([{ id: 1, category: '', amount: '' }]);
-    }
+    const newLines = d.expenses && d.expenses.length > 0 ? d.expenses : [{ id: 1, category: '', amount: '' }];
+    setExpenseLines(newLines);
 
     if (d.accts_pay || d.input_tax || d.output_tax) {
       setShowTaxFields(true);
     } else {
       setShowTaxFields(false);
     }
+    
+    setInitialFormState({
+      headerData: JSON.stringify(newHeader),
+      expenseLines: JSON.stringify(newLines)
+    });
     
     setErrorMessage('');
     setIsModalOpen(true);
@@ -453,10 +556,7 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
 
             {canEdit && (
               <button 
-                onClick={() => {
-                  resetForm();
-                  setIsModalOpen(true);
-                }}
+                onClick={handleNewDisbursement}
                 className="flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black transition-all shadow-lg shadow-blue-200"
               >
                 <Plus size={20} />
@@ -466,27 +566,27 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
           </div>
 
           {/* TABLE */}
-          <div className="overflow-x-auto custom-scrollbar flex-1">
+          <div className="overflow-x-auto custom-scrollbar flex-1 border border-slate-400 rounded-2xl shadow-xl bg-white">
             <table className="w-full text-left border-collapse min-w-[1500px]">
               <thead>
-                <tr className="bg-slate-50/50">
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 sticky left-0 z-10 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200">Payee</th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 text-center">CV No.</th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 text-center">Project</th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 text-right">Debit (Gross)</th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 text-right text-emerald-700 bg-emerald-50/30">Credit (CIB)</th>
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 text-right text-rose-700">EWT</th>
+                <tr className="bg-slate-100">
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 uppercase tracking-wider border-b-2 border-r border-slate-400 sticky left-0 z-10 bg-slate-100 shadow-[3px_0_0_0_#94a3b8]">Date</th>
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 uppercase tracking-wider border-b-2 border-r border-slate-400">Payee</th>
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 uppercase tracking-wider border-b-2 border-r border-slate-400 text-center">CV No.</th>
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 uppercase tracking-wider border-b-2 border-r border-slate-400 text-center">Project</th>
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 uppercase tracking-wider border-b-2 border-r border-slate-400 text-right">Debit (Gross)</th>
+                  <th className="px-6 py-5 text-xs font-black text-emerald-800 uppercase tracking-wider border-b-2 border-r border-slate-400 text-right bg-emerald-100/50">Credit (CIB)</th>
+                  <th className="px-6 py-5 text-xs font-black text-rose-800 uppercase tracking-wider border-b-2 border-r border-slate-400 text-right bg-rose-50/50">EWT</th>
                   {categories.map(cat => (
-                    <th key={cat} className="px-4 py-5 text-xs font-black text-slate-600 uppercase tracking-wider border-b border-slate-200 text-right min-w-[120px]" title={cat}>
+                    <th key={cat} className="px-4 py-5 text-[10px] font-black text-slate-600 uppercase tracking-widest border-b-2 border-r border-slate-400 text-right min-w-[120px] bg-slate-50" title={cat}>
                       {cat}
                     </th>
                   ))}
-                  <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 text-center">Particulars</th>
-                  {canEdit && <th className="px-6 py-5 text-xs font-black text-slate-700 uppercase tracking-wider border-b border-slate-200 text-center sticky right-0 z-10 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Action</th>}
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 uppercase tracking-wider border-b-2 border-r border-slate-400 text-center">Particulars</th>
+                  {canEdit && <th className="px-6 py-5 text-xs font-black text-slate-800 uppercase tracking-wider border-b-2 border-slate-400 text-center sticky right-0 z-10 bg-slate-100 shadow-[-3px_0_0_0_#94a3b8]">Action</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-400">
                 {filteredDisbursements.length === 0 ? (
                   <tr>
                     <td colSpan={8 + categories.length} className="px-8 py-20 text-center">
@@ -501,32 +601,32 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
                 ) : filteredDisbursements.map(d => (
                   <tr 
                     key={d.id} 
-                    className={`even:bg-slate-50/50 hover:bg-blue-50/50 transition-colors group ${canEdit ? 'cursor-pointer' : ''}`}
+                    className={`even:bg-slate-50/80 hover:bg-blue-100/50 transition-colors group ${canEdit ? 'cursor-pointer' : ''}`}
                     onDoubleClick={() => handleEditRow(d)}
                   >
-                    <td className="px-6 py-4 font-bold text-slate-500 sticky left-0 z-10 bg-white group-even:bg-slate-50/50 group-hover:bg-blue-50/50 shadow-[1px_0_0_0_#f1f5f9]">{d.date}</td>
-                    <td className="px-6 py-4 font-black text-slate-700">{d.payee}</td>
-                    <td className="px-6 py-4 font-black text-blue-600 text-center">#{d.cv_no}</td>
-                    <td className="px-6 py-4 font-black text-slate-400 text-center">{d.project_code}</td>
-                    <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">₱{(d.gross_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                    <td className="px-6 py-4 text-right font-mono font-bold text-emerald-600 bg-emerald-50/20">₱{(d.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                    <td className="px-6 py-4 text-right font-mono font-bold text-rose-500">₱{(d.ewt_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td className="px-6 py-4 font-black text-slate-600 sticky left-0 z-10 bg-white group-even:bg-slate-50 group-hover:bg-blue-100/50 border-r border-slate-400 shadow-[3px_0_0_0_#94a3b8]">{d.date}</td>
+                    <td className="px-6 py-4 font-black text-slate-800 border-r border-slate-400 group-even:bg-slate-50/30 group-hover:bg-blue-50/50">{d.payee}</td>
+                    <td className="px-6 py-4 font-black text-blue-700 text-center border-r border-slate-400 group-even:bg-slate-50/30 group-hover:bg-blue-50/50">#{d.cv_no}</td>
+                    <td className="px-6 py-4 font-black text-slate-500 text-center border-r border-slate-400 group-even:bg-slate-50/30 group-hover:bg-blue-50/50">{d.project_code}</td>
+                    <td className="px-6 py-4 text-right font-mono font-black text-slate-900 border-r border-slate-400 group-even:bg-slate-50/30 group-hover:bg-blue-50/50">₱{(d.gross_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td className="px-6 py-4 text-right font-mono font-black text-emerald-700 bg-emerald-50/30 border-r border-slate-400 group-hover:bg-emerald-100/30">₱{(d.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td className="px-6 py-4 text-right font-mono font-black text-rose-600 bg-rose-50/20 border-r border-slate-400 group-hover:bg-rose-100/20">₱{(d.ewt_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
                     {categories.map(cat => {
                       const amt = getCategoryAmount(d, cat);
                       return (
-                        <td key={cat} className={`px-4 py-4 text-right font-mono text-sm ${amt ? 'font-bold text-slate-700' : 'text-slate-300'}`}>
+                        <td key={cat} className={`px-4 py-4 text-right font-mono text-sm border-r border-slate-400 group-even:bg-slate-50/30 group-hover:bg-blue-50/30 ${amt ? 'font-black text-slate-800 bg-slate-100/40' : 'text-slate-300'}`}>
                           {amt ? `₱${amt.toLocaleString()}` : '—'}
                         </td>
                       );
                     })}
-                    <td className="px-6 py-4 text-slate-400 text-xs italic max-w-[200px] truncate" title={d.particulars}>{d.particulars}</td>
+                    <td className="px-6 py-4 text-slate-500 text-xs italic max-w-[200px] truncate border-r border-slate-400 group-even:bg-slate-50/30 group-hover:bg-blue-50/50" title={d.particulars}>{d.particulars}</td>
                     {canEdit && (
-                      <td className="px-6 py-4 text-center sticky right-0 z-10 bg-white group-even:bg-slate-50/50 group-hover:bg-blue-50/50 shadow-[-1px_0_0_0_#f1f5f9]">
+                      <td className="px-6 py-4 text-center sticky right-0 z-10 bg-white group-even:bg-slate-50 group-hover:bg-blue-100/50 shadow-[-3px_0_0_0_#94a3b8]">
                         <div className="flex items-center justify-center gap-2">
-                          <button onClick={(e) => { e.stopPropagation(); handleEditRow(d); }} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="Edit">
+                          <button onClick={(e) => { e.stopPropagation(); handleEditRow(d); }} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-200 border border-blue-100 rounded-lg transition-colors" title="Edit">
                             <Edit2 size={16} />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(d.id); }} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors" title="Delete">
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(d.id); }} className="p-2 bg-red-50 text-red-600 hover:bg-red-200 border border-red-100 rounded-lg transition-colors" title="Delete">
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -536,13 +636,13 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
                 ))}
               </tbody>
               {filteredDisbursements.length > 0 && (
-                <tfoot className="bg-slate-50 font-black text-slate-700 border-t-2 border-slate-200">
+                <tfoot className="bg-slate-100 font-black text-slate-800 border-t-4 border-slate-400">
                   <tr>
-                    <td colSpan="4" className="px-6 py-5 text-right text-[10px] tracking-widest text-slate-400 sticky left-0 z-10 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">TOTAL SUMMARY:</td>
-                    <td className="px-6 py-5 text-right font-mono text-blue-600">₱{ledgerTotals.dr.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                    <td className="px-6 py-5 text-right font-mono text-emerald-600">₱{ledgerTotals.cib.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                    <td className="px-6 py-5 text-right font-mono text-rose-600">₱{ledgerTotals.ewt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                    <td colSpan={categories.length + (canEdit ? 2 : 1)} className="px-6 py-5"></td>
+                    <td colSpan="4" className="px-6 py-6 text-right text-xs tracking-widest text-slate-500 sticky left-0 z-10 bg-slate-100 border-r border-slate-400 shadow-[3px_0_0_0_#94a3b8]">TOTAL SUMMARY:</td>
+                    <td className="px-6 py-6 text-right font-mono text-blue-800 border-r border-slate-400 text-lg">₱{ledgerTotals.dr.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td className="px-6 py-6 text-right font-mono text-emerald-800 border-r border-slate-400 text-lg">₱{ledgerTotals.cib.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td className="px-6 py-6 text-right font-mono text-rose-800 border-r border-slate-400 text-lg">₱{ledgerTotals.ewt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td colSpan={categories.length + (canEdit ? 2 : 1)} className="px-6 py-6"></td>
                   </tr>
                 </tfoot>
               )}
@@ -567,7 +667,7 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
                   </p>
                 </div>
               </div>
-              <button onClick={closeAndResetModal} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-full transition-colors">
+              <button onClick={handleCloseRequest} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-full transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -801,6 +901,26 @@ export default function DisbursementScreen({ projects, disbursements, refreshDat
         onClose={() => setPasswordModal({ isOpen: false, action: null, payload: null })}
         onConfirm={handlePasswordConfirm}
       />
+
+      <UnsavedChangesModal
+        isOpen={showUnsavedModal}
+        onClose={() => setShowUnsavedModal(false)}
+        onSaveDraft={handleSaveDraft}
+        onDiscard={handleDiscardChanges}
+      />
+
+      <DraftFoundModal
+        isOpen={showDraftModal}
+        onRestore={handleRestoreDraft}
+        onDiscard={handleDiscardDraft}
+      />
+
+      {(isSaving || isLoading) && (
+        <LoadingOverlay 
+          message={isSaving ? "Saving Entry" : "Refreshing Data"} 
+          subtext={isSaving ? "Paki-antay lamang..." : "Sina-sync ang inyong ledger..."} 
+        />
+      )}
     </div>
   );
 }

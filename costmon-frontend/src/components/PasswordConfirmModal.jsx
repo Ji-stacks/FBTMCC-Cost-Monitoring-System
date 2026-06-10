@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { KeyRound, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { API_URL } from '../utils/Constants';
 
@@ -7,6 +7,18 @@ export default function PasswordConfirmModal({ isOpen, onClose, onConfirm, actio
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen && !isVerifying) {
+        setPassword('');
+        setError('');
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isVerifying, onClose]);
 
   if (!isOpen) return null;
 
@@ -36,8 +48,8 @@ export default function PasswordConfirmModal({ isOpen, onClose, onConfirm, actio
       } else {
         setError(data.error || 'Mali ang password.');
       }
-    } catch (err) {
-      console.error('Password Verification Error:', err);
+    } catch {
+      // Inalis ang (err) dito para masunod ang Option 1 at mawala ang red line warning sa line 42
       setError('Server connection error. Please check if the backend is running.');
     } finally {
       setIsVerifying(false);
