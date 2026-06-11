@@ -137,6 +137,14 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
       d.project_code && d.project_code.toUpperCase() === project?.project_code?.toUpperCase()
     );
 
+    // Kuhanin ang total ng lahat ng nai-encode na expenses (Direct Cost)
+    const totalActualExpenses = projectExpenses.reduce((sum, d) => {
+      return sum + (d.expenses || []).reduce((s, exp) => s + (parseFloat(exp.amount) || 0), 0);
+    }, 0);
+
+    // Computation para sa Excess Budget (Budget Limit - Total Actual Expenses)
+    const excessBudget = budgetCostLimit - totalActualExpenses;
+
     return { 
       contractCost, 
       vatAmount, 
@@ -144,7 +152,9 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
       profitAmount, 
       profitPercent,
       budgetCostLimit,
-      projectExpenses 
+      projectExpenses,
+      totalActualExpenses,
+      excessBudget
     };
   }, [editingValues, disbursements, project]);
 
@@ -171,7 +181,10 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
     return grouped;
   }, [financials.projectExpenses]);
 
-  const formatMoney = (val) => val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatMoney = (val) => {
+    if (isNaN(val)) return '0.00';
+    return Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   if (!projects.length) {
     return (
@@ -215,12 +228,12 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
       <main className="flex-1 overflow-y-auto p-8 space-y-8">
         
         {/* ==============================================
-            MODERNIZED PROJECT PROGRESS COSTING BOX
+            MODERNIZED PROJECT PROGRESS COSTING BOX (COLORFUL)
         ============================================== */}
         <div className="w-full overflow-x-auto pb-4">
           <div className="bg-white border-2 border-slate-400 rounded-[2rem] shadow-xl min-w-[1100px] overflow-hidden flex flex-col">
             
-            {/* MODERN MAIN HEADER (Naging slate-800 na para mag-match sa baba) */}
+            {/* DARK MAIN HEADER */}
             <div className="bg-slate-800 text-center py-4 text-white uppercase tracking-[0.2em] text-sm font-black shadow-md flex items-center justify-center gap-3 relative z-10">
               <Calculator size={18} /> PROJECT PROGRESS COSTING
             </div>
@@ -363,7 +376,7 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
 
                       <div className="mt-auto pt-4 flex justify-between items-center border-t-2 border-slate-400">
                          <span className="font-black text-slate-900 tracking-wider">DIRECT COST</span>
-                         <span className="font-black font-mono text-sm text-slate-900">17,479.75</span>
+                         <span className="font-black font-mono text-sm text-slate-900">{formatMoney(financials.totalActualExpenses)}</span>
                       </div>
                     </div>
                   </div>
@@ -396,52 +409,56 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
 
                 </div>
 
-                {/* Bottom Summary Table Spanning the Right Section */}
+                {/* Bottom Summary Table Spanning the Right Section (DYNAMIC) */}
                 <div className="p-6 border-t-2 border-slate-400 bg-slate-100/50">
                   <div className="overflow-hidden rounded-xl border-2 border-slate-400 shadow-sm">
                     <table className="w-full text-[11px] font-black uppercase text-slate-800 border-collapse bg-white">
                       <tbody>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-orange-100/80 text-orange-900 border-r-2 border-slate-400 w-[40%]">TOTAL CONTRACT COST</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono w-[20%]">1,000.00</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono w-[20%]">{formatMoney(financials.contractCost)}</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500 w-[20%]">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono w-[20%]">1,000.00</td>
+                          <td className="py-2.5 px-4 text-center font-mono w-[20%]">{formatMoney(financials.contractCost)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-emerald-100/80 text-emerald-900 border-r-2 border-slate-400">TOTAL VAT AMOUNT</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">107.14</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.vatAmount)}</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">107.14</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">{formatMoney(financials.vatAmount)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-orange-100/80 text-orange-900 border-r-2 border-slate-400">TOTAL BUDGET COST</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">892.86</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.budgetCost)}</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">892.86</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">{formatMoney(financials.budgetCost)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-orange-100/80 text-orange-900 border-r-2 border-slate-400">TOTAL PROFIT</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">116.46</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.profitAmount)}</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">116.46</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">{formatMoney(financials.profitAmount)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-blue-100/80 text-blue-900 border-r-2 border-slate-400">TOTAL COST LIMIT (DLM)</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">776.40</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.budgetCostLimit)}</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-blue-50/50">776.40</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-blue-50/50">{formatMoney(financials.budgetCostLimit)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-3 px-4 border-r-2 border-slate-400">TOTAL PROGRESS COSTING</td>
-                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono">17,479.75</td>
+                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.totalActualExpenses)}</td>
                           <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-3 px-4 text-center font-mono">17,479.75</td>
+                          <td className="py-3 px-4 text-center font-mono">{formatMoney(financials.totalActualExpenses)}</td>
                         </tr>
                         <tr>
                           <td className="py-3 px-4 border-r-2 border-slate-400 text-slate-600">TOTAL EXCESS BUDGET</td>
-                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-600">-16,703.35</td>
+                          <td className={`py-3 px-4 border-r-2 border-slate-400 text-center font-mono ${financials.excessBudget < 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                            {formatMoney(financials.excessBudget)}
+                          </td>
                           <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-3 px-4 text-center font-mono bg-rose-200 text-rose-800 text-sm">(16,703.35)</td>
+                          <td className={`py-3 px-4 text-center font-mono text-sm font-black ${financials.excessBudget < 0 ? 'bg-rose-200 text-rose-800' : 'bg-slate-300 text-slate-900'}`}>
+                            {financials.excessBudget < 0 ? `(${formatMoney(Math.abs(financials.excessBudget))})` : formatMoney(financials.excessBudget)}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
