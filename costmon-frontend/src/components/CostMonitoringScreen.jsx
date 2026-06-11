@@ -56,7 +56,6 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
     return { profit_percentage: 0.15 };
   });
 
-  // TAMA NA ANG PART NA ITO (Walang useEffect)
   const [prevProject, setPrevProject] = useState(project);
 
   if (project?.id !== prevProject?.id) {
@@ -149,6 +148,29 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
     };
   }, [editingValues, disbursements, project]);
 
+  // LOGIC: I-group ang mga expenses per category
+  const expensesByCategory = useMemo(() => {
+    const grouped = {};
+    financials.projectExpenses.forEach(d => {
+      if (d.expenses && d.expenses.length > 0) {
+        d.expenses.forEach(exp => {
+          const cat = exp.category || 'UNCATEGORIZED';
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push({
+            id: d.id, 
+            date: d.date,
+            cv_no: d.cv_no,
+            or_inv_no: d.or_inv_no,
+            payee: d.payee,
+            particulars: d.particulars,
+            amount: parseFloat(exp.amount) || 0
+          });
+        });
+      }
+    });
+    return grouped;
+  }, [financials.projectExpenses]);
+
   const formatMoney = (val) => val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   if (!projects.length) {
@@ -198,8 +220,8 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
         <div className="w-full overflow-x-auto pb-4">
           <div className="bg-white border-2 border-slate-400 rounded-[2rem] shadow-xl min-w-[1100px] overflow-hidden flex flex-col">
             
-            {/* MODERN MAIN HEADER */}
-            <div className="bg-gradient-to-r from-blue-600 to-cyan-500 text-center py-4 text-white uppercase tracking-[0.2em] text-sm font-black shadow-md flex items-center justify-center gap-3 relative z-10">
+            {/* MODERN MAIN HEADER (Naging slate-800 na para mag-match sa baba) */}
+            <div className="bg-slate-800 text-center py-4 text-white uppercase tracking-[0.2em] text-sm font-black shadow-md flex items-center justify-center gap-3 relative z-10">
               <Calculator size={18} /> PROJECT PROGRESS COSTING
             </div>
             
@@ -441,87 +463,103 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
         )}
 
         {/* ==============================================
-            DISBURSEMENT LIST SECTION (PROJECT LEDGER)
+            PROJECT LEDGER (TWO-TONE MINIMALIST FORMAT)
         ============================================== */}
-        <section className="bg-white rounded-[2rem] border-2 border-slate-300 shadow-sm overflow-hidden flex flex-col min-h-[500px] mt-8">
-          <div className="px-8 py-6 border-b-2 border-slate-300 flex items-center justify-between bg-slate-50/80">
+        <section className="bg-[#f8fafc] flex flex-col min-h-[500px] mt-8">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                 Project Ledger
-                <span className="ml-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200">
+                <span className="ml-2 px-3 py-1 rounded-full bg-slate-200 text-slate-800 text-xs font-bold border border-slate-300">
                   {financials.projectExpenses.length} Entries
                 </span>
               </h3>
-              <p className="text-slate-500 text-xs font-medium mt-1 tracking-widest uppercase">Linked disbursements for {project?.project_code}</p>
+              <p className="text-slate-500 text-xs font-medium mt-1 tracking-widest uppercase">Construction Cost Breakdown by Category</p>
             </div>
-            <button className="px-5 py-2.5 bg-white border-2 border-slate-300 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors shadow-sm">
+            <button className="px-5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
               Export to Excel
             </button>
           </div>
 
-          <div className="overflow-x-auto border-2 border-slate-300 rounded-2xl shadow-sm m-6 mt-4">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-600 uppercase tracking-widest border-b-2 border-r-2 border-slate-300 last:border-r-0">Date</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-slate-600 uppercase tracking-widest border-b-2 border-r-2 border-slate-300 last:border-r-0">CV Number</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-slate-600 uppercase tracking-widest border-b-2 border-r-2 border-slate-300 last:border-r-0">Payee</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-slate-600 uppercase tracking-widest border-b-2 border-r-2 border-slate-300 last:border-r-0">Description</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-600 uppercase tracking-widest border-b-2 border-r-2 border-slate-300 last:border-r-0 text-right">Amount</th>
-                  {canEdit && <th className="px-6 py-5 text-[10px] font-black text-slate-600 uppercase tracking-widest border-b-2 border-slate-300 text-center">Action</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y-2 divide-slate-200">
-                {financials.projectExpenses.length === 0 ? (
-                  <tr>
-                    <td colSpan={canEdit ? "6" : "5"} className="px-8 py-20 text-center">
-                      <div className="flex flex-col items-center opacity-50 text-slate-500">
-                        <Calendar size={48} className="mb-3" strokeWidth={1.5} />
-                        <p className="text-lg font-bold">Walang Disbursement na Nahanap</p>
-                        <p className="text-sm font-medium mt-1">Siguraduhin na ang Project Code ay tugma sa disbursement entry.</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  financials.projectExpenses.map((d) => (
-                    <tr key={d.id} className="hover:bg-blue-50/80 transition-colors group">
-                      <td className="px-8 py-5 border-r-2 border-slate-200 last:border-r-0 bg-white group-hover:bg-transparent">
-                        <div className="text-sm font-bold text-slate-700">{d.date}</div>
-                      </td>
-                      <td className="px-6 py-5 border-r-2 border-slate-200 last:border-r-0 bg-white group-hover:bg-transparent">
-                        <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-mono text-xs font-bold border-2 border-slate-300">
-                          {d.cv_no || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5 border-r-2 border-slate-200 last:border-r-0 bg-white group-hover:bg-transparent">
-                        <div className="text-sm font-bold text-slate-800">{d.payee}</div>
-                      </td>
-                      <td className="px-6 py-5 border-r-2 border-slate-200 last:border-r-0 bg-white group-hover:bg-transparent">
-                        <div className="text-sm text-slate-600 font-medium max-w-xs truncate" title={d.particulars}>
-                          {d.particulars}
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-right border-r-2 border-slate-200 last:border-r-0 bg-white group-hover:bg-transparent">
-                        <div className="text-base font-black font-mono text-slate-900">
-                          ₱{parseFloat(d.gross_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </div>
-                      </td>
-                      {canEdit && (
-                        <td className="px-6 py-5 text-center bg-white group-hover:bg-transparent border-l-2 border-slate-200">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(d.id); }} 
-                            className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-colors border border-transparent hover:border-rose-200" 
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="overflow-x-auto pb-8">
+            {/* MAIN TITLE (Two-Tone) */}
+            <div className="bg-slate-800 text-center py-4 rounded-t-xl font-black text-white uppercase tracking-[0.2em] text-sm shadow-md min-w-[1000px] border-2 border-b-0 border-slate-800">
+              CONSTRUCTION COST BREAKDOWN
+            </div>
+
+            {Object.keys(expensesByCategory).length === 0 ? (
+              <div className="border-2 border-t-0 border-slate-800 rounded-b-xl bg-white min-w-[1000px] p-20 flex flex-col items-center opacity-50 text-slate-500 shadow-sm">
+                <Calendar size={48} className="mb-4" strokeWidth={1.5} />
+                <p className="text-xl font-bold">Walang Disbursement na Nahanap</p>
+                <p className="text-sm font-medium mt-1">Lalabas dito ang breakdown kapag may na-encode nang expenses para sa project na ito.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-8 min-w-[1000px] bg-white border-2 border-t-0 border-slate-800 rounded-b-xl p-6 shadow-sm">
+                {Object.entries(expensesByCategory).map(([category, items]) => (
+                  <div key={category} className="border-2 border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        {/* CATEGORY BANNER (DARK THEME) */}
+                        <tr className="bg-slate-800 border-b-2 border-slate-800">
+                          <th colSpan={canEdit ? 7 : 6} className="text-center py-3.5 font-black text-white uppercase tracking-[0.15em] text-sm">
+                            {category}
+                          </th>
+                        </tr>
+                        {/* COLUMN HEADERS */}
+                        <tr className="bg-slate-200 border-b-2 border-slate-800 text-[10px] font-black text-slate-800 text-center uppercase tracking-wider">
+                          <th className="py-3 px-4 w-[10%] border-r border-slate-800">Date</th>
+                          <th className="py-3 px-4 w-[10%] border-r border-slate-800">C.V.#</th>
+                          <th className="py-3 px-4 w-[10%] border-r border-slate-800">Invoice</th>
+                          <th className="py-3 px-4 w-[25%] text-left border-r border-slate-800">Supplier / Particulars</th>
+                          <th className="py-3 px-4 w-[25%] text-left border-r border-slate-800">Item Description</th>
+                          <th className="py-3 px-4 w-[15%] text-right pr-6 border-r border-slate-800">Amount</th>
+                          {canEdit && <th className="py-3 px-4 w-[5%]">Action</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {/* DATA ROWS */}
+                        {items.map((item, i) => (
+                          <tr key={`${item.id}-${i}`} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 text-center font-bold text-slate-700 border-r border-slate-800">{item.date}</td>
+                            <td className="p-4 text-center border-r border-slate-800">
+                              <span className="px-2 py-1 bg-white text-slate-800 rounded-md font-mono font-bold text-[11px] border border-slate-300">{item.cv_no || 'N/A'}</span>
+                            </td>
+                            <td className="p-4 text-center font-mono font-bold text-slate-700 border-r border-slate-800">{item.or_inv_no || '—'}</td>
+                            <td className="p-4 font-bold text-slate-800 text-left border-r border-slate-800">{item.payee}</td>
+                            <td className="p-4 font-medium text-slate-600 text-left border-r border-slate-800">{item.particulars}</td>
+                            <td className="p-4 text-right font-mono font-black text-slate-800 pr-6 border-r border-slate-800">
+                              {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                            {canEdit && (
+                              <td className="p-4 text-center">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteClick(item.id); }} 
+                                  className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-800 rounded-lg transition-colors" 
+                                  title="Delete Disbursement"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                        
+                        {/* SUBTOTAL ROW */}
+                        <tr className="bg-slate-100 border-t-2 border-slate-800">
+                          <td colSpan="5" className="p-4 text-right font-black text-[11px] uppercase tracking-widest text-slate-800 border-r border-slate-800">
+                            TOTAL FOR {category}:
+                          </td>
+                          <td className="p-4 text-right font-mono font-black text-slate-800 text-[15px] pr-6 border-r border-slate-800">
+                            ₱ {items.reduce((sum, i) => sum + i.amount, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          {canEdit && <td></td>}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
