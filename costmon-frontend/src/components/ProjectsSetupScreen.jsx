@@ -9,42 +9,109 @@ import {
   X,
   FileCode,
   CheckCircle2,
-  BarChart3
+  BarChart3,
+  Layers
 } from 'lucide-react';
 import PasswordConfirmModal from './PasswordConfirmModal';
 import LoadingOverlay from './LoadingOverlay';
-import { API_URL } from '../utils/constants';
+import { API_URL } from '../utils/Constants';
 
 export default function ProjectsSetupScreen({ projects, categories, refreshData, onNavigateToCostMonitoring, onModalStateChange }) {
   const [newProject, setNewProject] = useState({ project_code: '', project_name: '', contract_cost: '', profit_percentage: '20' });
   const [newCategory, setNewCategory] = useState('');
+  const [newSubCategory, setNewSubCategory] = useState('');
+  
   const [editingProject, setEditingProject] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [projectCodeError, setProjectCodeError] = useState('');
+  
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showCategorySuccessModal, setShowCategorySuccessModal] = useState(false);
-  const [recentlyAddedProject, setRecentlyAddedProject] = useState(null);
+  const [showSubCategorySuccessModal, setShowSubCategorySuccessModal] = useState(false);
   
+  const [recentlyAddedProject, setRecentlyAddedProject] = useState(null);
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
 
-  // Notify parent of modal state changes
+  // ==============================================================
+  // CATEGORY FILTERING & INJECTION LOGIC
+  // ==============================================================
+  const DEFAULT_MAIN_CATEGORIES = [
+    { raw: "PERMITS & CONSTRUCTION PLANS", clean: "PERMITS & CONSTRUCTION PLANS" },
+    { raw: "DOWN PAYMENT", clean: "DOWN PAYMENT" },
+    { raw: "CARPENTRY(----Php)", clean: "CARPENTRY" },
+    { raw: "PAINTING(----Php)", clean: "PAINTING" },
+    { raw: "ELECTRICAL(----Php)", clean: "ELECTRICAL" },
+    { raw: "PLUMBING(----Php)", clean: "PLUMBING" },
+    { raw: "TEMPERED GLASS", clean: "TEMPERED GLASS" },
+    { raw: "LABOR/PAYROLL", clean: "LABOR/PAYROLL" },
+    { raw: "ABB 1196 FORWARD", clean: "ABB 1196 FORWARD" },
+    { raw: "ZAM-546", clean: "ZAM-546" }
+  ];
+
+  const mainCategories = [];
+  const subCategories = [];
+  const foundMains = new Set();
+
+  // 1. Isala lahat ng nasa Database
+  categories.forEach(c => {
+    const rawName = c.name;
+    const upperName = rawName.toUpperCase();
+    const cleanUpper = upperName.replace(/\(-+PHP\)/gi, '').trim();
+
+    if (rawName.startsWith('[MAIN] ')) {
+      mainCategories.push({ ...c, displayName: rawName.replace('[MAIN] ', '') });
+    } else if (rawName.startsWith('[MISC] ')) {
+      subCategories.push({ ...c, displayName: rawName.replace('[MISC] ', '') });
+    } else {
+      // Tingnan kung isa ito sa mga default na Main Categories
+      const matchedMain = DEFAULT_MAIN_CATEGORIES.find(m => cleanUpper === m.clean || upperName.includes(m.clean));
+      
+      if (matchedMain) {
+        foundMains.add(matchedMain.raw);
+        mainCategories.push({ ...c, displayName: matchedMain.raw }); // Gamitin ang exact na format
+      } else {
+        // Ang mga natitira (Office Supplies, Food/Meals, etc.) ay ibabato sa Misc
+        subCategories.push({ ...c, displayName: rawName });
+      }
+    }
+  });
+
+  // 2. I-INJECT ang mga default Main Categories kung HINDI nahanap sa Database
+  DEFAULT_MAIN_CATEGORIES.forEach((m, index) => {
+    if (!foundMains.has(m.raw)) {
+      mainCategories.push({
+        id: `default-${index}`,
+        name: m.raw,
+        displayName: m.raw,
+        isHardcoded: true // Para itago ang delete button
+      });
+    }
+  });
+
+  // 3. I-sort para malinis
+  mainCategories.sort((a, b) => a.displayName.localeCompare(b.displayName));
+  subCategories.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  // ==============================================================
+
   useEffect(() => {
     if (onModalStateChange) {
-      onModalStateChange(showSuccessModal || showCategorySuccessModal || passwordModal.isOpen || isSaving);
+      onModalStateChange(showSuccessModal || showCategorySuccessModal || showSubCategorySuccessModal || passwordModal.isOpen || isSaving);
     }
-  }, [showSuccessModal, showCategorySuccessModal, passwordModal.isOpen, isSaving, onModalStateChange]);
+  }, [showSuccessModal, showCategorySuccessModal, showSubCategorySuccessModal, passwordModal.isOpen, isSaving, onModalStateChange]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         if (showSuccessModal) setShowSuccessModal(false);
         if (showCategorySuccessModal) setShowCategorySuccessModal(false);
+        if (showSubCategorySuccessModal) setShowSubCategorySuccessModal(false);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showSuccessModal, showCategorySuccessModal]);
+  }, [showSuccessModal, showCategorySuccessModal, showSubCategorySuccessModal]);
 
   const showMessage = (text, type = 'success') => {
     setMessage({ text, type });
@@ -55,7 +122,6 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
     if (e) e.preventDefault();
     if (!newProject.project_code || !newProject.project_name) return;
 
-    // Project Code Uniqueness Validation
     const isExisting = projects.some(p => p.project_code.toLowerCase() === newProject.project_code.toLowerCase());
     if (isExisting) {
       setProjectCodeError(`Code "${newProject.project_code}" already exists!`);
@@ -138,9 +204,14 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
     }
   };
 
-  const handleAddCategory = async (e) => {
+  const handleAddCategory = async (e, isMisc = false) => {
     if (e) e.preventDefault();
-    if (!newCategory.trim()) return;
+    
+    const valueToAdd = isMisc ? newSubCategory.trim() : newCategory.trim();
+    if (!valueToAdd) return;
+    
+    // Lagyan ng hidden tag para sa automatic classification sa susunod na pag-load
+    const finalName = isMisc ? `[MISC] ${valueToAdd}` : `[MAIN] ${valueToAdd}`;
     
     setIsSaving(true);
     try {
@@ -150,24 +221,31 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('fbtmcc_token')}`
         },
-        body: JSON.stringify({ name: newCategory.trim() })
+        body: JSON.stringify({ name: finalName })
       });
       
       if (response.ok) {
-        setShowCategorySuccessModal(true);
-        setNewCategory('');
+        if (isMisc) {
+          setShowSubCategorySuccessModal(true);
+          setNewSubCategory('');
+        } else {
+          setShowCategorySuccessModal(true);
+          setNewCategory('');
+        }
         refreshData();
       } else {
-        showMessage('Category already exists.', 'error');
+        showMessage('Item already exists.', 'error');
       }
     } catch {
-      showMessage('Failed to add category.', 'error');
+      showMessage('Failed to add item.', 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
   const executeDeleteCategory = async (category) => {
+    if (category.isHardcoded) return; // Prevent deleting hardcoded defaults
+    
     setIsSaving(true);
     try {
       const response = await fetch(`${API_URL}/categories/${category.id}`, { 
@@ -177,11 +255,11 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
         }
       });
       if (response.ok) {
-        showMessage('Category removed.');
+        showMessage('Item removed.');
         refreshData();
       }
     } catch {
-      showMessage('Failed to remove category.', 'error');
+      showMessage('Failed to remove item.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -197,8 +275,6 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
     }
     setPasswordModal({ isOpen: false, action: null, payload: null });
   };
-
-  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden">
@@ -226,8 +302,8 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
 
       <main className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* PROJECTS MANAGEMENT (8 COLS) */}
-        <section className="lg:col-span-8 space-y-6">
+        {/* PROJECTS MANAGEMENT (7 COLS) */}
+        <section className="lg:col-span-7 space-y-6">
           <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
             <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
@@ -258,7 +334,6 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
                         setEditingProject({...editingProject, project_code: val});
                       } else {
                         setNewProject({...newProject, project_code: val});
-                        // Clear error while typing if the code is now unique
                         if (projects.some(p => p.project_code.toLowerCase() === val.toLowerCase())) {
                            setProjectCodeError(`Code "${val}" na-gamit na!`);
                         } else {
@@ -310,27 +385,23 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
               </form>
             </div>
 
-            <div className="overflow-auto border border-slate-400 rounded-xl shadow-md bg-white custom-scrollbar max-h-[600px]">
-              <table className="w-full text-left border-collapse min-w-[800px]">
+            <div className="overflow-auto border border-slate-400 rounded-xl shadow-md bg-white custom-scrollbar max-h-[600px] m-4">
+              <table className="w-full text-left border-collapse min-w-[600px]">
                 <thead>
                   <tr className="bg-slate-100">
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 uppercase w-[160px]">Code</th>
+                    <th className="px-6 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 uppercase w-[140px]">Code</th>
                     <th className="px-6 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 uppercase">Project Name</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-r border-slate-400 uppercase text-right sticky right-[140px] z-10 bg-slate-100 shadow-[-3px_0_0_0_#94a3b8] w-[180px]">Contract Cost</th>
                     <th className="px-6 py-4 text-[10px] font-black text-slate-600 tracking-widest border-b-2 border-slate-400 uppercase text-center sticky right-0 z-10 bg-slate-100 w-[140px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-400">
                   {projects.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-6 py-4 border-r border-slate-400 bg-white group-hover:bg-slate-50 w-[160px]">
+                      <td className="px-6 py-4 border-r border-slate-400 bg-white group-hover:bg-slate-50 w-[140px]">
                         <span className="font-black text-indigo-700 bg-indigo-50/50 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm group-hover:bg-white transition-colors block text-center truncate">{p.project_code}</span>
                       </td>
                       <td className="px-6 py-4 border-r border-slate-400 bg-white group-hover:bg-slate-50">
                         <div className="font-bold text-slate-800">{p.project_name}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right bg-white group-hover:bg-slate-50 sticky right-[140px] z-10 shadow-[-3px_0_0_0_#94a3b8] w-[180px]">
-                        <div className="font-mono font-black text-slate-700 text-sm">₱{(p.contract_cost || 0).toLocaleString()}</div>
                       </td>
                       <td className="px-6 py-4 bg-white group-hover:bg-slate-50 sticky right-0 z-10 w-[140px]">
                         <div className="flex items-center justify-center gap-2">
@@ -359,45 +430,98 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
           </div>
         </section>
 
-        {/* CATEGORIES MANAGEMENT (4 COLS) */}
-        <section className="lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-[2rem] border border-slate-400 shadow-sm overflow-hidden flex flex-col h-full">
-            <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-400 flex items-center justify-between">
-              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                <Tags className="text-amber-500" size={24} />
-                Categories
+        {/* ==============================================
+            CATEGORIES MANAGEMENT (5 COLS) 
+        ============================================== */}
+        <section className="lg:col-span-5 space-y-6 flex flex-col h-[calc(100vh-140px)]">
+          
+          {/* 1. MAIN CATEGORIES BOX */}
+          <div className="bg-white rounded-[2rem] border border-slate-400 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[300px]">
+            <div className="px-8 py-5 bg-slate-50/50 border-b border-slate-400 flex items-center justify-between">
+              <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <Tags className="text-amber-500" size={20} />
+                Main Categories
               </h2>
-              <span className="px-3 py-1 bg-white border border-slate-400 rounded-full text-xs font-black text-slate-500 tracking-widest">
-                {categories.length}
+              <span className="px-3 py-1 bg-white border border-slate-400 rounded-full text-[10px] font-black text-slate-500 tracking-widest">
+                {mainCategories.length}
               </span>
             </div>
 
-            <div className="p-6 border-b border-slate-400 bg-amber-50/20">
-              <form onSubmit={handleAddCategory} className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-600 tracking-widest ml-1 uppercase">New Category</label>
+            <div className="p-5 border-b border-slate-400 bg-amber-50/20">
+              <form onSubmit={(e) => handleAddCategory(e, false)} className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-600 tracking-widest ml-1 uppercase">Add Main Category</label>
                 <div className="flex gap-2">
                   <input 
-                    className="flex-1 px-4 py-3 rounded-xl border-2 border-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white shadow-sm"
+                    className="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white shadow-sm text-sm"
                     placeholder="Enter category name..."
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     required
                   />
-                  <button 
-                    type="submit" 
-                    className="p-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-lg shadow-amber-100 transition-all"
-                  >
-                    <Plus size={20} />
+                  <button type="submit" className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-lg shadow-amber-100 transition-all">
+                    <Plus size={18} />
                   </button>
                 </div>
               </form>
             </div>
 
-            <div className="flex-1 overflow-y-auto max-h-[600px] p-6 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
               <div className="space-y-2">
-                {sortedCategories.map((cat) => (
+                {mainCategories.map((cat) => (
                   <div key={cat.id} className="group flex items-center justify-between p-3 rounded-xl border border-slate-300 hover:border-amber-200 hover:bg-amber-50/30 transition-all">
-                    <span className="text-sm font-bold text-slate-600">{cat.name}</span>
+                    <span className="text-xs font-bold text-slate-600">{cat.displayName}</span>
+                    
+                    {/* HIDE delete button for hardcoded DEFAULT tables */}
+                    {!cat.isHardcoded && (
+                      <button 
+                        onClick={() => setPasswordModal({ isOpen: true, action: 'delete_category', payload: cat })}
+                        className="p-1.5 text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Delete Category"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. MISCELLANEOUS SUB-CATEGORIES BOX */}
+          <div className="bg-white rounded-[2rem] border border-slate-400 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[300px]">
+            <div className="px-8 py-5 bg-teal-50/50 border-b border-slate-400 flex items-center justify-between">
+              <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <Layers className="text-teal-600" size={20} />
+                Misc. Sub-Categories
+              </h2>
+              <span className="px-3 py-1 bg-white border border-slate-400 rounded-full text-[10px] font-black text-slate-500 tracking-widest">
+                {subCategories.length}
+              </span>
+            </div>
+
+            <div className="p-5 border-b border-slate-400 bg-teal-50/30">
+              <form onSubmit={(e) => handleAddCategory(e, true)} className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-600 tracking-widest ml-1 uppercase">Add Misc Sub-Category</label>
+                <div className="flex gap-2">
+                  <input 
+                    className="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white shadow-sm text-sm"
+                    placeholder="e.g. EXTRA LABOR..."
+                    value={newSubCategory}
+                    onChange={(e) => setNewSubCategory(e.target.value)}
+                    required
+                  />
+                  <button type="submit" className="p-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-lg shadow-teal-200 transition-all">
+                    <Plus size={18} />
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+              <div className="space-y-2">
+                {subCategories.map((cat) => (
+                  <div key={cat.id} className="group flex items-center justify-between p-3 rounded-xl border border-slate-300 hover:border-teal-200 hover:bg-teal-50/30 transition-all">
+                    <span className="text-xs font-bold text-slate-600">{cat.displayName}</span>
                     <button 
                       onClick={() => setPasswordModal({ isOpen: true, action: 'delete_category', payload: cat })}
                       className="p-1.5 text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all"
@@ -409,10 +533,55 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
               </div>
             </div>
           </div>
+
         </section>
       </main>
 
-      {/* SUCCESS MODAL */}
+      {/* SUCCESS MODAL: MAIN CATEGORY */}
+      {showCategorySuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex flex-col items-center text-center space-y-6">
+              <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-2 shadow-inner">
+                <CheckCircle2 size={40} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-slate-800">Main Category Added!</h3>
+                <p className="text-slate-500 font-medium mt-2">
+                  Bagong main category ay matagumpay na naidagdag.
+                </p>
+              </div>
+              <button onClick={() => setShowCategorySuccessModal(false)} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl shadow-lg shadow-amber-100 transition-all text-lg">
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS MODAL: SUB-CATEGORY */}
+      {showSubCategorySuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex flex-col items-center text-center space-y-6">
+              <div className="w-20 h-20 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mb-2 shadow-inner">
+                <CheckCircle2 size={40} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-slate-800">Sub-Category Added!</h3>
+                <p className="text-slate-500 font-medium mt-2">
+                  Papasok ito sa loob ng Miscellaneous Cost table.
+                </p>
+              </div>
+              <button onClick={() => setShowSubCategorySuccessModal(false)} className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl shadow-lg shadow-teal-200 transition-all text-lg">
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS MODAL: PROJECT */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] p-10 max-w-xl w-full shadow-2xl animate-in zoom-in-95">
@@ -445,31 +614,6 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
                   Stay Here
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CATEGORY SUCCESS MODAL */}
-      {showCategorySuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[2rem] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95">
-            <div className="flex flex-col items-center text-center space-y-6">
-              <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-2 shadow-inner">
-                <Plus size={40} />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black text-slate-800">Category Added!</h3>
-                <p className="text-slate-500 font-medium mt-2">
-                  Bagong kategorya ay matagumpay na naidagdag sa system.
-                </p>
-              </div>
-              <button 
-                onClick={() => setShowCategorySuccessModal(false)}
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl shadow-lg shadow-amber-100 transition-all text-lg"
-              >
-                Understood
-              </button>
             </div>
           </div>
         </div>
