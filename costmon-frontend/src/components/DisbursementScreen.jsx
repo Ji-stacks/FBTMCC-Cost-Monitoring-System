@@ -190,7 +190,8 @@ export default function DisbursementScreen({ projects, categories, disbursements
     accts_pay: '',
     input_tax: '',
     output_tax: '',
-    target_cib: ''
+    target_cib: '',
+    costing_type: 'normal' // IDINAGDAG: Bagong field para sa type ng costing
   });
 
   // --- CATEGORY SPLITTING LOGIC ---
@@ -298,7 +299,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
   }, [constructionLines, miscLines]);
 
   const resetForm = () => {
-    setHeaderData({ date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '' });
+    setHeaderData({ date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' });
     const now = Date.now();
     setConstructionLines([{ id: now, category: '', amount: '' }]);
     setMiscLines([{ id: now + 1, category: '', amount: '' }]);
@@ -384,7 +385,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
     resetForm();
     
     // Set initial state for new form
-    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '' };
+    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
     const initC = [{ id: Date.now(), category: '', amount: '' }];
     const initM = [{ id: Date.now() + 1, category: '', amount: '' }];
     setHeaderData(initHeader);
@@ -404,7 +405,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
       setShowDraftModal(true);
     } else {
       resetForm();
-      const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '' };
+      const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
       const initC = [{ id: Date.now(), category: '', amount: '' }];
       const initM = [{ id: Date.now() + 1, category: '', amount: '' }];
       setHeaderData(initHeader);
@@ -433,7 +434,8 @@ export default function DisbursementScreen({ projects, categories, disbursements
       accts_pay: d.accts_pay || '',
       input_tax: d.input_tax || '',
       output_tax: d.output_tax || '',
-      target_cib: d.target_cib || d.net_amount || '' 
+      target_cib: d.target_cib || d.net_amount || '',
+      costing_type: d.costing_type || 'normal' // IDINAGDAG: Load costing type
     };
     setHeaderData(newHeader);
     
@@ -849,7 +851,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
             
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
-                <div className="bg-blue-100 p-2 rounded-lg"><FileText className="text-blue-600" size={20} /></div>
+                <div className={`p-2 rounded-lg ${headerData.costing_type === 'additional' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}><FileText size={20} /></div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-800 leading-tight">
                     {editingId ? 'Edit Disbursement Voucher' : 'Disbursement Voucher Entry'}
@@ -861,6 +863,32 @@ export default function DisbursementScreen({ projects, categories, disbursements
               </div>
               <button onClick={handleCloseRequest} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-full transition-colors">
                 <X size={24} />
+              </button>
+            </div>
+
+            {/* COSTING TYPE TOGGLE */}
+            <div className="bg-white px-6 py-3 border-b border-slate-200 shrink-0 flex gap-4">
+              <button
+                type="button"
+                onClick={() => handleHeaderChange({ target: { name: 'costing_type', value: 'normal' } })}
+                className={`flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-all border-2 ${
+                  headerData.costing_type === 'normal' 
+                    ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' 
+                    : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                }`}
+              >
+                Normal Disbursement
+              </button>
+              <button
+                type="button"
+                onClick={() => handleHeaderChange({ target: { name: 'costing_type', value: 'additional' } })}
+                className={`flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-all border-2 ${
+                  headerData.costing_type === 'additional' 
+                    ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' 
+                    : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                }`}
+              >
+                Additionals Costing
               </button>
             </div>
 
