@@ -7,7 +7,8 @@ import {
   Trash2,
   Calculator,
   ArrowUp,
-  Receipt
+  Receipt,
+  X
 } from 'lucide-react';
 import SearchableDropdown from './SearchableDropdown';
 import PasswordConfirmModal from './PasswordConfirmModal';
@@ -24,6 +25,7 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
   
   // State para sa "Popping/Tibok" animation
   const [pulsingCategory, setPulsingCategory] = useState(null);
+  const [isAdditionalsModalOpen, setIsAdditionalsModalOpen] = useState(false);
   
   // State & Ref para sa Back to Top button
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -128,31 +130,71 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
     const contractCost = parseFloat(editingValues.contract_cost) || 0;
     const profitPercent = parseFloat(editingValues.profit_percentage) || 0;
 
-    const vatAmount = contractCost * (1 - (1 / 1.12)); 
-    const budgetCost = contractCost - vatAmount;
-    const profitAmount = budgetCost * (1 - (1 / (1 + profitPercent)));
-    const budgetCostLimit = budgetCost - profitAmount;
-
     const projectExpenses = (disbursements || []).filter(d => 
       d.project_code && d.project_code.toUpperCase() === project?.project_code?.toUpperCase()
     );
 
-    const totalActualExpenses = projectExpenses.reduce((sum, d) => {
+    // SPLIT EXPENSES BY TYPE
+    const normalExpenses = projectExpenses.filter(d => d.costing_type === 'normal' || !d.costing_type);
+    const additionalExpenses = projectExpenses.filter(d => d.costing_type === 'additional');
+
+    const totalNormalExpenses = normalExpenses.reduce((sum, d) => {
       return sum + (d.expenses || []).reduce((s, exp) => s + (parseFloat(exp.amount) || 0), 0);
     }, 0);
 
-    const excessBudget = budgetCostLimit - totalActualExpenses;
+    const totalAdditionalExpenses = additionalExpenses.reduce((sum, d) => {
+      return sum + (d.expenses || []).reduce((s, exp) => s + (parseFloat(exp.amount) || 0), 0);
+    }, 0);
+
+    // NORMAL COMPUTATIONS
+    const vatNormal = contractCost * (1 - (1 / 1.12)); 
+    const budgetCostNormal = contractCost - vatNormal;
+    const profitAmountNormal = budgetCostNormal * (1 - (1 / (1 + profitPercent)));
+    const budgetCostLimitNormal = budgetCostNormal - profitAmountNormal;
+    const excessBudgetNormal = budgetCostLimitNormal - totalNormalExpenses;
+
+    // ADDITIONAL COMPUTATIONS (Based on Screenshot 24 Excel formulas)
+    const vatAdditional = totalAdditionalExpenses * (1 - (1 / 1.12));
+    const budgetCostAdditional = totalAdditionalExpenses - vatAdditional;
+    const profitAmountAdditional = budgetCostAdditional * (1 - (1 / (1 + profitPercent)));
+    const budgetCostLimitAdditional = budgetCostAdditional - profitAmountAdditional;
+    const excessBudgetAdditional = budgetCostLimitAdditional; // Row 23 in Excel: Total Additional 306,318.68
+
+    // OVERALL TOTALS
+    const contractOverall = contractCost + totalAdditionalExpenses;
+    const vatOverall = vatNormal + vatAdditional;
+    const budgetOverall = budgetCostNormal + budgetCostAdditional;
+    const profitOverall = profitAmountNormal + profitAmountAdditional;
+    const limitOverall = budgetCostLimitNormal + budgetCostLimitAdditional;
+    const progressOverall = totalNormalExpenses; // Additionals not counted in progress (Row 22)
+    const excessOverall = excessBudgetNormal + excessBudgetAdditional;
 
     return { 
       contractCost, 
-      vatAmount, 
-      budgetCost, 
-      profitAmount, 
+      vatAmount: vatNormal,
+      budgetCost: budgetCostNormal, 
+      profitAmount: profitAmountNormal, 
       profitPercent,
-      budgetCostLimit,
-      projectExpenses,
-      totalActualExpenses,
-      excessBudget
+      budgetCostLimit: budgetCostLimitNormal,
+      totalNormalExpenses,
+      excessBudget: excessBudgetNormal,
+
+      vatAdditional,
+      budgetCostAdditional,
+      profitAmountAdditional,
+      budgetCostLimitAdditional,
+      totalAdditionalExpenses,
+      excessBudgetAdditional,
+
+      contractOverall,
+      vatOverall,
+      budgetOverall,
+      profitOverall,
+      limitOverall,
+      progressOverall,
+      excessOverall,
+
+      projectExpenses
     };
   }, [editingValues, disbursements, project]);
 
@@ -175,13 +217,13 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
   const expensesByCategory = useMemo(() => {
     const grouped = {};
     
-    // I-setup agad ang mga tables base sa Required Categories
     REQUIRED_CATEGORIES.forEach(cat => {
       grouped[cat] = [];
     });
 
     financials.projectExpenses.forEach(d => {
-      if (d.expenses && d.expenses.length > 0) {
+      // NORMAL COSTING LANG ANG PAPASOK DITO
+      if (d.costing_type === 'normal' && d.expenses && d.expenses.length > 0) {
         d.expenses.forEach(exp => {
           const originalCat = exp.category || 'UNCATEGORIZED';
           const catUpper = originalCat.toUpperCase();
@@ -195,7 +237,6 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
           
           const amount = parseFloat(exp.amount) || 0;
           
-          // Data coming from disbursements
           const laborLess = 0;
           const laborEwt = 0;
           const laborTotal = 0;
@@ -212,7 +253,7 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
 
           grouped[targetCat].push({
             id: d.id, 
-            lineId: exp.id, // IDINAGDAG: Ang specific ID ng expense line
+            lineId: exp.id, 
             date: d.date,
             cv_no: d.cv_no,
             or_inv_no: d.or_inv_no,
@@ -233,6 +274,57 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
     });
     return grouped;
   }, [financials.projectExpenses, REQUIRED_CATEGORIES]);
+
+  // BAGONG USEMEMO PARA SA ADDITIONAL COSTING
+  const additionalExpensesByCategory = useMemo(() => {
+    const grouped = {};
+
+    financials.projectExpenses.forEach(d => {
+      // ADDITIONAL COSTING LANG ANG PAPASOK DITO
+      if (d.costing_type === 'additional' && d.expenses && d.expenses.length > 0) {
+        d.expenses.forEach(exp => {
+          const originalCat = exp.category || 'UNCATEGORIZED';
+          const targetCat = originalCat.toUpperCase();
+          
+          if (!grouped[targetCat]) {
+            grouped[targetCat] = [];
+          }
+          
+          const amount = parseFloat(exp.amount) || 0;
+
+          // Same computation logic as main ledger for consistency
+          const laborLess = 0;
+          const laborEwt = 0;
+          const laborTotal = 0;
+          const matlQty = 0;
+          const matlUnitCost = 0;
+          const matlTotal = amount; 
+          const totalMatlCost = amount;
+          const totalLaborCost = 0;
+          
+          grouped[targetCat].push({
+            id: d.id, 
+            lineId: exp.id, 
+            date: d.date,
+            cv_no: d.cv_no,
+            or_inv_no: d.or_inv_no,
+            payee: d.payee,
+            particulars: exp.particulars || '',
+            amount: amount,
+            laborLess,
+            laborEwt,
+            laborTotal,
+            matlQty,
+            matlUnitCost,
+            matlTotal,
+            totalMatlCost,
+            totalLaborCost
+          });
+        });
+      }
+    });
+    return grouped;
+  }, [financials.projectExpenses]);
 
   // Isala ang mga tables na HINDI WALANG LAMAN
   const displayedCategories = useMemo(() => {
@@ -505,15 +597,15 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
                       </div>
 
                       <div className="mt-auto pt-4 flex justify-between items-center border-t-2 border-slate-400">
-                         <span className="font-black text-slate-900 tracking-wider">DIRECT COST</span>
-                         <span className="font-black font-mono text-sm text-slate-900">{formatMoney(financials.totalActualExpenses)}</span>
-                      </div>
+                         <span className="font-black tracking-wider">DIRECT COST</span>
+                         <span className="font-black font-mono text-sm text-slate-900">{formatMoney(Object.values(expensesByCategory).flat().reduce((sum, item) => sum + item.amount, 0))}</span>
+                         </div>
                     </div>
                   </div>
 
                   {/* Additional-Based Column */}
                   <div className="flex-1 flex flex-col bg-slate-50/50">
-                    <div className="bg-purple-100 text-purple-900 text-center font-black text-xs uppercase py-3 border-b-2 border-slate-400 tracking-wider">
+                    <div className="bg-red-100 text-red-900 text-center font-black text-xs uppercase py-3 border-b-2 border-slate-400 tracking-wider">
                       Additional-Based Costing
                     </div>
                     <div className="p-6 space-y-3 text-xs font-bold text-slate-700 uppercase flex-1 flex flex-col">
@@ -527,12 +619,49 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
                       <div className="h-4"></div>
                       
                       <div className="flex justify-between border-b border-slate-300 pb-2"><span>Additional Works:</span><span></span></div>
-                      <div className="flex justify-between border-b border-slate-300 pb-2 pl-4 text-slate-500"><span>Total Additional</span><span></span></div>
-                      <div className="flex justify-between border-b border-slate-300 pb-2 pl-4 text-slate-500"><span>Vat Amount</span><span className="font-mono">-</span></div>
+                      
+                      {/* DYNAMIC ADDITIONAL CATEGORIES */}
+                      {Object.keys(additionalExpensesByCategory).length === 0 ? (
+                        <div className="text-center py-4 text-[10px] text-slate-400 italic">No additional costs recorded</div>
+                      ) : (
+                        Object.keys(additionalExpensesByCategory).map(cat => {
+                          const catTotal = additionalExpensesByCategory[cat].reduce((sum, item) => sum + item.amount, 0);
+                          return (
+                            <div key={cat} className="flex justify-between border-b border-slate-300 pb-2 pl-4 text-slate-600">
+                              <span className="truncate pr-2">{cat.length > 25 ? cat.substring(0, 25) + '...' : cat}:</span>
+                              <span className="font-mono">{formatMoney(catTotal)}</span>
+                            </div>
+                          );
+                        })
+                      )}
+
+                      <div className="flex justify-between border-b border-slate-300 pb-2 pl-4 text-slate-800 font-black mt-2">
+                        <span>Total Additional</span>
+                        <span className="font-mono text-red-600">
+                          {formatMoney(financials.totalAdditionalExpenses)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-slate-300 pb-2 pl-4 text-slate-500">
+                        <span>Vat Amount</span>
+                        <span className="font-mono">{formatMoney(financials.vatAdditional)}</span>
+                      </div>
 
                       <div className="mt-auto pt-4 flex justify-between items-center border-t-2 border-slate-400 text-slate-600">
-                         <span className="font-black tracking-wider">ADD'L COST LIMIT</span>
-                         <span className="font-black font-mono text-sm">-</span>
+                         <span className="font-black tracking-wider text-red-800 uppercase">Add'l Cost Limit</span>
+                         <span className="font-black font-mono text-sm text-red-700">
+                           {formatMoney(financials.budgetCostAdditional)}
+                         </span>
+                      </div>
+                      
+                      {/* VIEW DETAILS BUTTON FOR ADDITIONALS */}
+                      <div className="mt-2 pt-2 border-t border-red-200/50">
+                        <button 
+                          onClick={() => setIsAdditionalsModalOpen(true)}
+                          disabled={Object.keys(additionalExpensesByCategory).length === 0}
+                          className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border border-red-200"
+                        >
+                          <FileSpreadsheet size={14} /> View Full Ledger
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -543,51 +672,59 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
                 <div className="p-6 border-t-2 border-slate-400 bg-slate-100/50">
                   <div className="overflow-hidden rounded-xl border-2 border-slate-400 shadow-sm">
                     <table className="w-full text-[11px] font-black uppercase text-slate-800 border-collapse bg-white">
+                      <thead>
+                        <tr className="bg-slate-200 border-b-2 border-slate-400 text-[9px]">
+                          <th className="py-2 px-4 text-left border-r-2 border-slate-400">Description</th>
+                          <th className="py-2 px-4 text-center border-r-2 border-slate-400">Normal (Voucher)</th>
+                          <th className="py-2 px-4 text-center border-r-2 border-slate-400 text-red-700">Additionals</th>
+                          <th className="py-2 px-4 text-center">Total Overall</th>
+                        </tr>
+                      </thead>
                       <tbody>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-orange-100/80 text-orange-900 border-r-2 border-slate-400 w-[40%]">TOTAL CONTRACT COST</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono w-[20%]">{formatMoney(financials.contractCost)}</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500 w-[20%]">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono w-[20%]">{formatMoney(financials.contractCost)}</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-red-600 w-[20%]">{formatMoney(financials.totalAdditionalExpenses)}</td>
+                          <td className="py-2.5 px-4 text-center font-mono w-[20%] font-black">{formatMoney(financials.contractOverall)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-emerald-100/80 text-emerald-900 border-r-2 border-slate-400">TOTAL VAT AMOUNT</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.vatAmount)}</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">{formatMoney(financials.vatAmount)}</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-red-600">{formatMoney(financials.vatAdditional)}</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50 font-black">{formatMoney(financials.vatOverall)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-orange-100/80 text-orange-900 border-r-2 border-slate-400">TOTAL BUDGET COST</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.budgetCost)}</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">{formatMoney(financials.budgetCost)}</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-red-600">{formatMoney(financials.budgetCostAdditional)}</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50 font-black">{formatMoney(financials.budgetOverall)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-orange-100/80 text-orange-900 border-r-2 border-slate-400">TOTAL PROFIT</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.profitAmount)}</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50">{formatMoney(financials.profitAmount)}</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-red-600">{formatMoney(financials.profitAmountAdditional)}</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-orange-50 font-black">{formatMoney(financials.profitOverall)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-2.5 px-4 bg-blue-100/80 text-blue-900 border-r-2 border-slate-400">TOTAL COST LIMIT (DLM)</td>
                           <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.budgetCostLimit)}</td>
-                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-2.5 px-4 text-center font-mono bg-blue-50/50">{formatMoney(financials.budgetCostLimit)}</td>
+                          <td className="py-2.5 px-4 border-r-2 border-slate-400 text-center font-mono text-red-600">{formatMoney(financials.budgetCostLimitAdditional)}</td>
+                          <td className="py-2.5 px-4 text-center font-mono bg-blue-50/50 font-black">{formatMoney(financials.limitOverall)}</td>
                         </tr>
                         <tr className="border-b-2 border-slate-400">
                           <td className="py-3 px-4 border-r-2 border-slate-400">TOTAL PROGRESS COSTING</td>
-                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.totalActualExpenses)}</td>
-                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className="py-3 px-4 text-center font-mono">{formatMoney(financials.totalActualExpenses)}</td>
+                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono">{formatMoney(financials.totalNormalExpenses)}</td>
+                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-400">0.00</td>
+                          <td className="py-3 px-4 text-center font-mono font-black">{formatMoney(financials.progressOverall)}</td>
                         </tr>
                         <tr>
                           <td className="py-3 px-4 border-r-2 border-slate-400 text-slate-600">TOTAL EXCESS BUDGET</td>
                           <td className={`py-3 px-4 border-r-2 border-slate-400 text-center font-mono ${financials.excessBudget < 0 ? 'text-red-600' : 'text-slate-600'}`}>
                             {formatMoney(financials.excessBudget)}
                           </td>
-                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono text-slate-500">0.00</td>
-                          <td className={`py-3 px-4 text-center font-mono text-sm font-black ${financials.excessBudget < 0 ? 'bg-rose-200 text-rose-800' : 'bg-slate-300 text-slate-900'}`}>
-                            {financials.excessBudget < 0 ? `(${formatMoney(Math.abs(financials.excessBudget))})` : formatMoney(financials.excessBudget)}
+                          <td className="py-3 px-4 border-r-2 border-slate-400 text-center font-mono text-emerald-600">{formatMoney(financials.excessBudgetAdditional)}</td>
+                          <td className={`py-3 px-4 text-center font-mono text-sm font-black ${financials.excessOverall < 0 ? 'bg-rose-200 text-rose-800' : 'bg-slate-300 text-slate-900'}`}>
+                            {financials.excessOverall < 0 ? `(${formatMoney(Math.abs(financials.excessOverall))})` : formatMoney(financials.excessOverall)}
                           </td>
                         </tr>
                       </tbody>
@@ -834,6 +971,150 @@ export default function CostMonitoringScreen({ projects, disbursements, onUpdate
           subtext={isSwitching ? "Inihahanda ang data..." : "Paki-antay lamang..."} 
         />
       )}
+
+      {/* ADDITIONAL WORKS MODAL */}
+      <AdditionalsLedgerModal 
+        isOpen={isAdditionalsModalOpen} 
+        onClose={() => setIsAdditionalsModalOpen(false)} 
+        data={additionalExpensesByCategory} 
+        canEdit={canEdit}
+        onDeleteClick={handleDeleteClick}
+      />
+    </div>
+  );
+}
+
+// BAGONG MODAL COMPONENT para sa Additional Works
+function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick }) {
+  if (!isOpen) return null;
+
+  const totalAmount = Object.values(data).flat().reduce((sum, item) => sum + item.amount, 0);
+
+  const formatMoney = (val) => {
+    if (val === null || val === undefined || val === '') return '-'; 
+    if (isNaN(val)) return '0.00';
+    if (val === 0) return '-'; 
+    return Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white w-[98vw] max-w-[1600px] h-[90vh] rounded-2xl shadow-2xl flex flex-col p-6 border-4 border-red-200 animate-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+          <h2 className="text-xl font-black text-red-800 tracking-tight flex items-center gap-3">
+            <div className="bg-red-100 p-2 rounded-lg text-red-600">
+              <FileSpreadsheet size={22} />
+            </div>
+            Additional Works & Costs Ledger
+          </h2>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:bg-red-100 hover:text-red-600 rounded-full transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar mt-4 pb-4">
+          <div className="flex flex-col gap-8 min-w-[1400px]">
+            {Object.keys(data).length === 0 ? (
+              <div className="text-center py-20 text-slate-400">
+                <p>No additional costs recorded.</p>
+              </div>
+            ) : (
+              Object.entries(data).map(([category, items]) => (
+                <div key={category} className="border-2 border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      {/* Pinalitan ang bg-red-600 ng bg-slate-800 para katulad ng main ledger */}
+                      <tr className="bg-slate-800 border-b-2 border-slate-800">
+                        <th colSpan={canEdit ? 14 : 13} className="text-center py-3.5 font-black text-white uppercase tracking-[0.15em] text-sm">
+                          {category}
+                        </th>
+                      </tr>
+                      
+                      {/* COLUMN HEADERS - Matched with Main Ledger */}
+                      <tr className="bg-slate-200 border-b-2 border-slate-800 text-[10px] font-black text-slate-800 text-center uppercase tracking-wider leading-tight">
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Date</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">C.V.#</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Invoice</th>
+                        <th className="py-3 px-2 w-[15%] text-left border-r border-slate-800">Supplier / Particulars</th>
+                        <th className="py-3 px-2 w-[15%] text-left border-r border-slate-800">Item Description</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Labor Less</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Labor Ewt</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Labor Total</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Mat'l QTY</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Mat'l Unit Cost</th>
+                        <th className="py-3 px-2 w-[6%] border-r border-slate-800">Mat'l Total</th>
+                        <th className="py-3 px-2 w-[8%] border-r border-slate-800">Total Mat'l Cost</th>
+                        <th className="py-3 px-2 w-[8%] border-r border-slate-800 text-right pr-4">Total Labor Cost</th>
+                        {canEdit && <th className="py-3 px-2 w-[4%]">Act</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 bg-white">
+                      {/* DATA ROWS - Pinalitan ang hover:bg-red-50/30 ng standard na hover:bg-slate-50 */}
+                      {items.map((item, i) => (
+                        <tr key={`${item.id}-${i}`} className="hover:bg-slate-50 transition-colors text-[11px]">
+                          <td className="p-3 text-center font-bold text-slate-700 border-r border-slate-800">{item.date}</td>
+                          <td className="p-3 text-center border-r border-slate-800">
+                            <span className="px-1.5 py-1 bg-white text-slate-800 rounded font-mono font-bold text-[10px] border border-slate-300">{item.cv_no || 'N/A'}</span>
+                          </td>
+                          <td className="p-3 text-center font-mono font-bold text-slate-700 border-r border-slate-800">{item.or_inv_no || '-'}</td>
+                          <td className="p-3 font-bold text-slate-800 text-left border-r border-slate-800 truncate max-w-[150px]" title={item.payee}>{item.payee}</td>
+                          <td className="p-3 font-medium text-slate-600 text-left border-r border-slate-800 truncate max-w-[150px]" title={item.particulars}>{item.particulars}</td>
+                          
+                          <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800 bg-slate-50/50">{formatMoney(item.laborLess)}</td>
+                          <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800 bg-slate-50/50">{formatMoney(item.laborEwt)}</td>
+                          <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800 bg-slate-50/50">{formatMoney(item.laborTotal)}</td>
+                          
+                          <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800">{formatMoney(item.matlQty)}</td>
+                          <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800">{formatMoney(item.matlUnitCost)}</td>
+                          <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800">{formatMoney(item.matlTotal)}</td>
+                          
+                          <td className="p-3 text-right font-mono font-bold text-slate-800 border-r border-slate-800 bg-slate-100/50">{formatMoney(item.totalMatlCost)}</td>
+                          <td className="p-3 text-right pr-4 font-mono font-black text-slate-900 border-r border-slate-800 bg-slate-100/50">{formatMoney(item.totalLaborCost)}</td>
+
+                          {canEdit && (
+                            <td className="p-2 text-center bg-white">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); onDeleteClick(item.id); }} 
+                                className="p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-800 rounded-lg transition-colors" 
+                                title="Update/Delete in Disbursement"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+
+                      {/* SUBTOTAL ROW - Pinalitan pabalik sa slate ang background */}
+                      <tr className="bg-slate-100 border-t-2 border-slate-800">
+                        <td colSpan="11" className="p-3 text-right font-black text-[11px] uppercase tracking-widest text-slate-800 border-r border-slate-800">
+                          TOTAL FOR {category}:
+                        </td>
+                        <td className="p-3 text-right font-mono font-black text-slate-800 text-sm border-r border-slate-800 bg-slate-200/50">
+                          ₱ {items.reduce((sum, i) => sum + i.totalMatlCost, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-right pr-4 font-mono font-black text-slate-800 text-sm border-r border-slate-800 bg-slate-200/50">
+                          ₱ {items.reduce((sum, i) => sum + i.totalLaborCost, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        {canEdit && <td></td>}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-slate-200 flex justify-end items-center mt-2 shrink-0">
+          <div className="flex items-baseline gap-3">
+            <span className="text-sm font-bold uppercase text-slate-500">Grand Total Additionals:</span>
+            <span className="text-2xl font-black text-red-700 font-mono">
+              ₱ {totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
