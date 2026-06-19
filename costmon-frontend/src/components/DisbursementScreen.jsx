@@ -10,7 +10,12 @@ import { API_URL } from '../utils/Constants';
 
 export default function DisbursementScreen({ projects, categories, disbursements, refreshData, isLoading, userRole, initialSearchQuery, initialDisbursementId, onClearInitialDisbursement, onModalStateChange }) {
   const canEdit = userRole === 'encoder';
+  
+  // ==========================================
+  // 1. STATES & REFS
+  // ==========================================
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [postSavePrompt, setPostSavePrompt] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [showTaxFields, setShowTaxFields] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -20,44 +25,46 @@ export default function DisbursementScreen({ projects, categories, disbursements
   const [initialFormState, setInitialFormState] = useState(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [showDraftModal, setShowDraftModal] = useState(false);
-  const [postSavePrompt, setPostSavePrompt] = useState(false); // BAGONG STATE para sa after-save prompt
 
-  // PASSWORD VERIFICATION STATE
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
   const [isAddingLine, setIsAddingLine] = useState(false);
 
-  // --- SEARCH BAR STATE ---
-  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
-
-  // --- MONTH FILTER LOGIC ---
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedMonths, setSelectedMonths] = useState(['All']);
   const [tempSelectedMonths, setTempSelectedMonths] = useState(['All']);
   const filterRef = useRef(null);
 
-  // Notify parent of modal state changes
-  useEffect(() => {
-    if (onModalStateChange) {
-      onModalStateChange(isModalOpen || showUnsavedModal || showDraftModal || passwordModal.isOpen || postSavePrompt);
-    }
-  }, [isModalOpen, showUnsavedModal, showDraftModal, passwordModal.isOpen, postSavePrompt, onModalStateChange]);
-
-  useEffect(() => {
-    if (initialSearchQuery) {
-      const timer = setTimeout(() => {
-        setSearchQuery(initialSearchQuery);
-        setSelectedMonths(['All']); 
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [initialSearchQuery]);
-
-  // --- ZOOM LOGIC ---
+  // Zoom
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('disbursement_zoom');
     return saved ? parseFloat(saved) : 1;
   });
 
+  // Voucher Form State
+  const [headerData, setHeaderData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    project_code: '',
+    payee: '',
+    particulars: '',
+    tin: '',
+    cv_no: '',
+    check_no: '',
+    or_inv_no: '',
+    accts_pay: '',
+    input_tax: '',
+    output_tax: '',
+    target_cib: '',
+    costing_type: 'normal' 
+  });
+
+  const [constructionLines, setConstructionLines] = useState([{ id: 1, category: '', amount: '' }]);
+  const [miscLines, setMiscLines] = useState([{ id: 2, category: '', amount: '' }]);
+
+  // ==========================================
+  // 2. SEARCH, FILTER & ZOOM LOGIC
+  // ==========================================
   const handleZoomIn = () => {
     setZoomLevel(prev => {
       const next = Math.min(prev + 0.1, 1.5);
@@ -78,16 +85,6 @@ export default function DisbursementScreen({ projects, categories, disbursements
     setZoomLevel(1);
     localStorage.setItem('disbursement_zoom', '1');
   };
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (filterRef.current && !filterRef.current.contains(event.target)) {
-        setIsFilterOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const availableMonths = useMemo(() => {
     const months = disbursements.map(d => d.date && d.date.substring(0, 7)).filter(Boolean); 
@@ -163,24 +160,9 @@ export default function DisbursementScreen({ projects, categories, disbursements
     return { dr, cr, diff: dr - cr, ewt, cib };
   }, [filteredDisbursements]);
 
-  // VOUCHER STATE
-  const [headerData, setHeaderData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    project_code: '',
-    payee: '',
-    particulars: '',
-    tin: '',
-    cv_no: '',
-    check_no: '',
-    or_inv_no: '',
-    accts_pay: '',
-    input_tax: '',
-    output_tax: '',
-    target_cib: '',
-    costing_type: 'normal' 
-  });
-
-  // --- CATEGORY SPLITTING LOGIC ---
+  // ==========================================
+  // 3. CATEGORY SPLITTING & COMPUTATIONS
+  // ==========================================
   const { mainCategoriesList, miscCategoriesList } = useMemo(() => {
     const main = [];
     const misc = [];
@@ -230,40 +212,6 @@ export default function DisbursementScreen({ projects, categories, disbursements
     };
   }, [categories]);
 
-  const [constructionLines, setConstructionLines] = useState([{ id: 1, category: '', amount: '' }]);
-  const [miscLines, setMiscLines] = useState([{ id: 2, category: '', amount: '' }]);
-
-  const handleHeaderChange = (e) => setHeaderData({ ...headerData, [e.target.name]: e.target.value });
-  
-  const handleLineChange = (id, field, value, type = 'construction') => {
-    const setter = type === 'construction' ? setConstructionLines : setMiscLines;
-    setter(lines => lines.map(line => line.id === id ? { ...line, [field]: value } : line));
-    
-    if (field === 'category' && value.trim() !== '') {
-      setLineErrors(errors => errors.filter(errId => errId !== id));
-    }
-  };
-
-  const addLine = (type = 'construction') => {
-    if (isAddingLine) return;
-    setIsAddingLine(true);
-
-    const setter = type === 'construction' ? setConstructionLines : setMiscLines;
-    setter(prev => {
-      const allLines = [...constructionLines, ...miscLines];
-      const maxId = allLines.length > 0 ? Math.max(...allLines.map(line => typeof line.id === 'number' ? line.id : 0)) : 0;
-      return [...prev, { id: maxId + 1, category: '', amount: '' }];
-    });
-
-    setTimeout(() => setIsAddingLine(false), 300);
-  };
-  
-  const removeLine = (id, type = 'construction') => {
-    const setter = type === 'construction' ? setConstructionLines : setMiscLines;
-    if (type === 'construction' && constructionLines.length === 1 && miscLines.length === 0) return;
-    setter(prev => prev.filter(line => line.id !== id));
-  };
-
   const totals = useMemo(() => {
     let totalDebit = 0;
     let ewtPayable = 0;
@@ -279,10 +227,19 @@ export default function DisbursementScreen({ projects, categories, disbursements
     return { totalDebit, ewtPayable, cib_coh };
   }, [constructionLines, miscLines]);
 
-  // ==========================================
-  // FUNCTION DECLARATIONS
-  // ==========================================
+  const targetCib = parseFloat(headerData.target_cib) || 0;
+  const isVarianceZero = Math.abs(targetCib - totals.cib_coh) < 0.01; 
 
+  const isDuplicateCV = useMemo(() => {
+    if (!headerData.cv_no) return false;
+    return disbursements.some(
+      (d) => d.id !== editingId && d.cv_no && d.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase()
+    );
+  }, [headerData.cv_no, disbursements, editingId]);
+
+  // ==========================================
+  // 4. HANDLERS
+  // ==========================================
   const resetForm = () => {
     setHeaderData({ date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' });
     const now = Date.now();
@@ -312,6 +269,51 @@ export default function DisbursementScreen({ projects, categories, disbursements
     } else {
       closeAndResetModal();
     }
+  };
+
+  const handleStayInModal = () => {
+    setPostSavePrompt(false);
+    resetForm(); 
+    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
+    const initC = [{ id: Date.now(), category: '', amount: '' }];
+    const initM = [{ id: Date.now() + 1, category: '', amount: '' }];
+    setInitialFormState({
+      headerData: JSON.stringify(initHeader),
+      expenseLines: JSON.stringify([...initC, ...initM])
+    });
+  };
+
+  const handleCloseModalAfterSave = () => {
+    setPostSavePrompt(false);
+    closeAndResetModal();
+  };
+
+  const handleHeaderChange = (e) => setHeaderData({ ...headerData, [e.target.name]: e.target.value });
+  
+  const handleLineChange = (id, field, value, type = 'construction') => {
+    const setter = type === 'construction' ? setConstructionLines : setMiscLines;
+    setter(lines => lines.map(line => line.id === id ? { ...line, [field]: value } : line));
+    if (field === 'category' && value.trim() !== '') {
+      setLineErrors(errors => errors.filter(errId => errId !== id));
+    }
+  };
+
+  const addLine = (type = 'construction') => {
+    if (isAddingLine) return;
+    setIsAddingLine(true);
+    const setter = type === 'construction' ? setConstructionLines : setMiscLines;
+    setter(prev => {
+      const allLines = [...constructionLines, ...miscLines];
+      const maxId = allLines.length > 0 ? Math.max(...allLines.map(line => typeof line.id === 'number' ? line.id : 0)) : 0;
+      return [...prev, { id: maxId + 1, category: '', amount: '' }];
+    });
+    setTimeout(() => setIsAddingLine(false), 300);
+  };
+  
+  const removeLine = (id, type = 'construction') => {
+    const setter = type === 'construction' ? setConstructionLines : setMiscLines;
+    if (type === 'construction' && constructionLines.length === 1 && miscLines.length === 0) return;
+    setter(prev => prev.filter(line => line.id !== id));
   };
 
   const handleSaveDraft = () => {
@@ -373,7 +375,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
   };
 
   const handleNewDisbursement = () => {
-    const hasDraft = !!localStorage.getItem('disbursement_draft');
+    const hasDraft = localStorage.getItem('disbursement_draft') !== null;
     if (hasDraft) {
       setShowDraftModal(true);
     } else {
@@ -425,6 +427,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
     });
 
     if (cLines.length === 0) cLines.push({ id: Date.now(), category: '', amount: '' });
+    if (mLines.length === 0) mLines.push({ id: Date.now() + 1, category: '', amount: '' });
     
     setConstructionLines(cLines);
     setMiscLines(mLines);
@@ -442,35 +445,6 @@ export default function DisbursementScreen({ projects, categories, disbursements
     
     setErrorMessage('');
     setIsModalOpen(true);
-  };
-
-  const isDuplicateCV = useMemo(() => {
-    if (!headerData.cv_no) return false;
-    return disbursements.some(
-      (d) => d.id !== editingId && d.cv_no && d.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase()
-    );
-  }, [headerData.cv_no, disbursements, editingId]);
-
-  const targetCib = parseFloat(headerData.target_cib) || 0;
-  const isVarianceZero = Math.abs(targetCib - totals.cib_coh) < 0.01; 
-
-  // --- ACTIONS FOR POST-SAVE PROMPT ---
-  const handleStayInModal = () => {
-    setPostSavePrompt(false);
-    resetForm(); 
-    // Magse-set ng bagong initial form state para hindi mag-trigger yung unsaved changes kapag cinlose agad
-    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
-    const initC = [{ id: Date.now(), category: '', amount: '' }];
-    const initM = [{ id: Date.now() + 1, category: '', amount: '' }];
-    setInitialFormState({
-      headerData: JSON.stringify(initHeader),
-      expenseLines: JSON.stringify([...initC, ...initM])
-    });
-  };
-
-  const handleCloseModalAfterSave = () => {
-    setPostSavePrompt(false);
-    closeAndResetModal();
   };
 
   const executeSave = async (disbursementData) => {
@@ -491,7 +465,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
 
       if (response.ok) {
         await refreshData(); 
-        setPostSavePrompt(true); // Lalabas yung prompt instead na mag-close agad
+        setPostSavePrompt(true); // Buksan ang post-save prompt
       } else {
         const errData = await response.json();
         setErrorMessage("Server Error: " + (errData.error || "Hindi ma-save ang data."));
@@ -513,19 +487,27 @@ export default function DisbursementScreen({ projects, categories, disbursements
     if (isDuplicateCV) { setErrorMessage("May kaparehas na CV#! Paki-palitan bago i-save."); return; }
     if (!isVarianceZero) { setErrorMessage("Hindi pwedeng i-save! Paki-check ang Variance. Kailangang pantay ang Target CIB sa Computed CIB."); return; }
 
-    const combinedLines = [...constructionLines, ...miscLines].map(line => ({
+    const combinedLines = [...constructionLines, ...miscLines].filter(
+      line => (line.category && line.category.trim() !== '') || (line.amount && line.amount !== '')
+    ).map(line => ({
       ...line,
       id: line.id || Date.now() + Math.random()
     }));
-    const emptyCategoryLines = combinedLines.filter(line => !line.category || line.category.trim() === '');
-    if (emptyCategoryLines.length > 0) {
-      const errorIds = emptyCategoryLines.map(line => line.id);
+
+    if (combinedLines.length === 0) {
+      setErrorMessage("Kailangan maglagay ng kahit isang expense item.");
+      return;
+    }
+
+    const invalidLines = combinedLines.filter(line => !line.category || line.category.trim() === '');
+    if (invalidLines.length > 0) {
+      const errorIds = invalidLines.map(line => line.id);
       setLineErrors(errorIds); 
+      setErrorMessage("Paki-pili ang kategorya para sa lahat ng nilagyan ng amount.");
       return; 
     }
 
     const newDisbursement = {
-      // eslint-disable-next-line react-hooks/purity
       id: editingId || Date.now().toString(36) + Math.floor(Math.random()*1000).toString(), 
       ...headerData,
       expenses: combinedLines,
@@ -542,60 +524,6 @@ export default function DisbursementScreen({ projects, categories, disbursements
     }
   };
 
-  // Safe to call useEffect below handleCloseRequest, handleSubmit, and handleStayInModal
-  useEffect(() => {
-    function handleKeyDown(event) {
-      // Kapag nakabukas yung Post-Save Prompt
-      if (postSavePrompt) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          handleStayInModal();
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          handleCloseModalAfterSave();
-        }
-        return; // Pigilan ang ibang keys kung nakabukas ito
-      }
-
-      // Default Escape handling
-      if (event.key === 'Escape') {
-        if (isModalOpen && !showUnsavedModal && !showDraftModal) handleCloseRequest();
-        if (isFilterOpen) setIsFilterOpen(false);
-      }
-      
-      // Ctrl+Enter / Cmd+Enter para mag-save
-      if (isModalOpen && !postSavePrompt && (event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        event.preventDefault();
-        
-        const isDup = disbursements.some((d) => d.id !== editingId && d.cv_no && d.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase());
-        const tCib = parseFloat(headerData.target_cib) || 0;
-        const isVarZero = Math.abs(tCib - totals.cib_coh) < 0.01;
-        
-        if (!isDup && isVarZero && tCib > 0 && !isSaving && canEdit && headerData.project_code && headerData.cv_no) {
-           const fakeEvent = { preventDefault: () => {} };
-           handleSubmit(fakeEvent);
-        }
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, isFilterOpen, showUnsavedModal, showDraftModal, postSavePrompt, headerData, constructionLines, miscLines, initialFormState, isSaving, totals, disbursements, editingId, canEdit]);
-
-  // Auto-open modal if initialDisbursementId is provided
-  useEffect(() => {
-    if (initialDisbursementId && disbursements.length > 0) {
-      const disbursement = disbursements.find(d => d.id === initialDisbursementId);
-      if (disbursement) {
-        const timer = setTimeout(() => {
-          handleEditRow(disbursement);
-          if (onClearInitialDisbursement) onClearInitialDisbursement();
-        }, 100);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [initialDisbursementId, disbursements]);
-
-
   const handleDeleteClick = (id) => {
     if (!canEdit) return;
     setPasswordModal({ isOpen: true, action: 'delete', payload: id });
@@ -606,9 +534,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
       const token = localStorage.getItem('fbtmcc_token');
       const response = await fetch(`${API_URL}/disbursements/${id}`, { 
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}` 
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         await refreshData();
@@ -636,6 +562,80 @@ export default function DisbursementScreen({ projects, categories, disbursements
     return exp && parseFloat(exp.amount) ? parseFloat(exp.amount) : null;
   };
 
+  // ==========================================
+  // 5. USE EFFECTS (Listeners & Auto-Opens)
+  // ==========================================
+  
+  useEffect(() => {
+    if (onModalStateChange) {
+      onModalStateChange(isModalOpen || showUnsavedModal || showDraftModal || passwordModal.isOpen || postSavePrompt);
+    }
+  }, [isModalOpen, showUnsavedModal, showDraftModal, passwordModal.isOpen, postSavePrompt, onModalStateChange]);
+
+  useEffect(() => {
+    if (initialDisbursementId && disbursements.length > 0) {
+      const disbursement = disbursements.find(d => d.id === initialDisbursementId);
+      if (disbursement) {
+        const timer = setTimeout(() => {
+          handleEditRow(disbursement);
+          if (onClearInitialDisbursement) onClearInitialDisbursement();
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDisbursementId, disbursements]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (filterRef.current && !filterRef.current.contains(event.target)) {
+        setIsFilterOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (postSavePrompt) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          handleStayInModal();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          handleCloseModalAfterSave();
+        }
+        return; 
+      }
+
+      if (event.key === 'Escape') {
+        if (isModalOpen && !showUnsavedModal && !showDraftModal) handleCloseRequest();
+        if (isFilterOpen) setIsFilterOpen(false);
+      }
+      
+      if (isModalOpen && !postSavePrompt && (event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        
+        const isDup = disbursements.some((d) => d.id !== editingId && d.cv_no && d.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase());
+        const tCib = parseFloat(headerData.target_cib) || 0;
+        const isVarZero = Math.abs(tCib - totals.cib_coh) < 0.01;
+        
+        if (!isDup && isVarZero && tCib > 0 && !isSaving && canEdit && headerData.project_code && headerData.cv_no) {
+           const fakeEvent = { preventDefault: () => {} };
+           handleSubmit(fakeEvent);
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isModalOpen, isFilterOpen, showUnsavedModal, showDraftModal, postSavePrompt, headerData, constructionLines, miscLines, initialFormState, isSaving, totals, disbursements, editingId, canEdit]);
+
+
+  // ==========================================
+  // RENDER UI
+  // ==========================================
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden">
       {/* HEADER */}
@@ -1012,6 +1012,8 @@ export default function DisbursementScreen({ projects, categories, disbursements
                       <input 
                         type="text" 
                         name="cv_no" 
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         placeholder="Unique CV#" 
                         className={`w-full p-2 rounded-md text-sm outline-none font-bold transition-all duration-200 ${
                           isDuplicateCV 
@@ -1019,7 +1021,10 @@ export default function DisbursementScreen({ projects, categories, disbursements
                             : 'border border-slate-300 text-slate-700 bg-amber-50 focus:ring-2 focus:ring-blue-500'
                         }`}
                         value={headerData.cv_no} 
-                        onChange={handleHeaderChange} 
+                        onChange={(e) => {
+                          const onlyNums = e.target.value.replace(/[^0-9]/g, '');
+                          handleHeaderChange({ target: { name: 'cv_no', value: onlyNums } });
+                        }} 
                         required 
                       />
                       {isDuplicateCV && (
@@ -1123,7 +1128,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
                               <span className="absolute left-3 top-2 text-slate-400 text-sm font-medium">₱</span>
                               <input type="number" step="0.01" placeholder="0.00" 
                                 className="w-full pl-7 p-2 border border-slate-300 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none text-right"
-                                value={line.amount} onChange={(e) => handleLineChange(line.id, 'amount', e.target.value, 'construction')} required={line.category !== ''} />
+                                value={line.amount} onChange={(e) => handleLineChange(line.id, 'amount', e.target.value, 'construction')} />
                             </div>
                             <button type="button" onClick={() => removeLine(line.id, 'construction')} disabled={constructionLines.length === 1 && miscLines.length === 0}
                               className="p-2 mt-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors disabled:opacity-30 disabled:hover:bg-transparent">
@@ -1173,7 +1178,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
                               <span className="absolute left-3 top-2 text-slate-400 text-sm font-medium">₱</span>
                               <input type="number" step="0.01" placeholder="0.00" 
                                 className="w-full pl-7 p-2 border border-slate-300 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none text-right"
-                                value={line.amount} onChange={(e) => handleLineChange(line.id, 'amount', e.target.value, 'misc')} required={line.category !== ''} />
+                                value={line.amount} onChange={(e) => handleLineChange(line.id, 'amount', e.target.value, 'misc')} />
                             </div>
                             <button type="button" onClick={() => removeLine(line.id, 'misc')}
                               className="p-2 mt-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors">
@@ -1232,6 +1237,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
                       <div className="flex flex-col gap-2">
                         <button 
                           type="submit" 
+                          onClick={handleSubmit}
                           disabled={isDuplicateCV || !isVarianceZero || targetCib === 0 || isSaving}
                           className={`w-full text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
                             (isDuplicateCV || !isVarianceZero || targetCib === 0 || isSaving) 
@@ -1241,7 +1247,9 @@ export default function DisbursementScreen({ projects, categories, disbursements
                         >
                           <Save size={18} /> {isSaving ? 'Nagsa-save...' : (editingId ? 'Update Disbursement' : 'Post Disbursement')}
                         </button>
-                        
+                        <span className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest hidden md:block">
+                          Maaari ring gamitin ang <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-slate-300 border border-slate-600">CTRL + Enter</kbd>
+                        </span>
                       </div>
                     </div>
                   </div>
