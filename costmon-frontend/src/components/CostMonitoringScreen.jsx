@@ -18,7 +18,7 @@ import SearchableDropdown from './SearchableDropdown';
 import PasswordConfirmModal from './PasswordConfirmModal';
 import LoadingOverlay from './LoadingOverlay';
 
-export default function CostMonitoringScreen({ projects, disbursements, onUpdateProject, initialProjectId, userRole, refreshData, onModalStateChange, onNavigateToDisbursement }) {
+export default function CostMonitoringScreen({ projects, disbursements, onUpdateProject, initialProjectId, userRole,  onModalStateChange, onNavigateToDisbursement }) {
   const canEdit = userRole === 'encoder';
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
   const [redirectionModal, setRedirectionModal] = useState({ isOpen: false, disbursementId: null, cvNo: '' });
