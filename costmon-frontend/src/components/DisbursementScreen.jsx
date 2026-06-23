@@ -92,7 +92,8 @@ export default function DisbursementScreen({ projects, categories, disbursements
   }, [disbursements]);
 
   const filteredDisbursements = useMemo(() => {
-    let result = disbursements;
+    // HARD FILTER: Remove anything marked as 'additional' so they NEVER show up here
+    let result = disbursements.filter(d => d.costing_type !== 'additional');
     
     if (!selectedMonths.includes('All')) {
       result = result.filter(d => selectedMonths.some(m => d.date && d.date.startsWith(m)));
@@ -465,7 +466,7 @@ export default function DisbursementScreen({ projects, categories, disbursements
 
       if (response.ok) {
         await refreshData(); 
-        setPostSavePrompt(true); // Buksan ang post-save prompt
+        setPostSavePrompt(true); 
       } else {
         const errData = await response.json();
         setErrorMessage("Server Error: " + (errData.error || "Hindi ma-save ang data."));
@@ -931,7 +932,9 @@ export default function DisbursementScreen({ projects, categories, disbursements
             
             <div className="bg-white dark:bg-slate-800 px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0 transition-colors duration-300">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${headerData.costing_type === 'additional' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'}`}><FileText size={20} /></div>
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                  <FileText size={20} />
+                </div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
                     {editingId ? 'Edit Disbursement Voucher' : 'Disbursement Voucher Entry'}
@@ -943,32 +946,6 @@ export default function DisbursementScreen({ projects, categories, disbursements
               </div>
               <button onClick={handleCloseRequest} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 dark:hover:text-red-400 text-slate-400 dark:text-slate-500 rounded-full transition-colors">
                 <X size={24} />
-              </button>
-            </div>
-
-            {/* COSTING TYPE TOGGLE */}
-            <div className="bg-white dark:bg-slate-800 px-6 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex gap-4 transition-colors duration-300">
-              <button
-                type="button"
-                onClick={() => handleHeaderChange({ target: { name: 'costing_type', value: 'normal' } })}
-                className={`flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-all border-2 ${
-                  headerData.costing_type === 'normal' 
-                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-400 shadow-sm' 
-                    : 'bg-slate-50 dark:bg-slate-800 border-transparent text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-300'
-                }`}
-              >
-                Normal Disbursement
-              </button>
-              <button
-                type="button"
-                onClick={() => handleHeaderChange({ target: { name: 'costing_type', value: 'additional' } })}
-                className={`flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-all border-2 ${
-                  headerData.costing_type === 'additional' 
-                    ? 'bg-red-50 dark:bg-red-900/20 border-red-500 dark:border-red-400 text-red-700 dark:text-red-400 shadow-sm' 
-                    : 'bg-slate-50 dark:bg-slate-800 border-transparent text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-300'
-                }`}
-              >
-                Additionals Costing
               </button>
             </div>
 

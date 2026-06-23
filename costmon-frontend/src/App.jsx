@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Receipt, BarChart3, Settings, Wallet, UserCircle2, LogOut, PanelLeftClose, PanelLeftOpen, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Receipt, BarChart3, Settings, Wallet, UserCircle2, LogOut, PanelLeftClose, PanelLeftOpen, Sun, Moon, Save, Trash2, AlertCircle } from 'lucide-react';
 
 import LoginScreen from './components/LoginScreen';
 import NavItem from './components/NavItem';
@@ -8,6 +8,7 @@ import DisbursementScreen from './components/DisbursementScreen';
 import CostMonitoringScreen from './components/CostMonitoringScreen';
 import ProjectsSetupScreen from './components/ProjectsSetupScreen';
 import GlobalSearchModal from './components/GlobalSearchModal';
+import PasswordConfirmModal from './components/PasswordConfirmModal';
 import { API_URL } from './utils/Constants';
 
 export default function App() {
@@ -28,6 +29,21 @@ export default function App() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
+
+  // ==========================================
+  // NAVIGATION GUARD STATES
+  // ==========================================
+  const [isProjectDirty, setIsProjectDirty] = useState(false);
+  const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [pendingProjectData, setPendingProjectData] = useState(null); // Para i-store yung ise-save
+  const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null });
+
+  // Pasa ito sa CostMonitoringScreen para laging updated yung App kung may changes
+  const handleDirtyChange = useCallback((isDirty, currentData) => {
+    setIsProjectDirty(isDirty);
+    setPendingProjectData(currentData);
+  }, []);
 
   // ==========================================
   // DARK MODE LOGIC (CINEMATIC RIPPLE ANIMATION)
@@ -87,7 +103,7 @@ export default function App() {
           clipPath: isDark ? [...clipPath].reverse() : clipPath
         },
         {
-          duration: 1200, // PINABAGAL: Ginawang 1.2 seconds para kitang-kita ang bagsak ng kulay!
+          duration: 1200, 
           easing: 'ease-in-out',
           pseudoElement: isDark 
             ? '::view-transition-old(root)' 
@@ -96,7 +112,6 @@ export default function App() {
       );
     });
   };
-  // ==========================================
 
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
@@ -144,17 +159,17 @@ export default function App() {
   }, [showLogoutModal, isAnyModalOpen]);
 
   useEffect(() => {
-    if (showLogoutModal || isSearchOpen || isAnyModalOpen) {
+    if (showLogoutModal || isSearchOpen || isAnyModalOpen || showSaveConfirmModal || passwordModal.isOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
     }
     return () => { document.body.style.overflow = 'unset'; };
-  }, [showLogoutModal, isSearchOpen, isAnyModalOpen]);
+  }, [showLogoutModal, isSearchOpen, isAnyModalOpen, showSaveConfirmModal, passwordModal.isOpen]);
 
-  const handleUpdateProject = (projectId, updatedValues) => {
+  const handleUpdateProject = async (projectId, updatedValues) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updatedValues } : p));
-    fetch(`${API_URL}/projects/${projectId}`, {
+    await fetch(`${API_URL}/projects/${projectId}`, {
       method: 'PUT',
       headers: { 
         'Content-Type': 'application/json',
@@ -162,6 +177,28 @@ export default function App() {
       },
       body: JSON.stringify(updatedValues)
     });
+    setIsProjectDirty(false); // Reset dirty flag after successful save
+  };
+
+  // ==========================================
+  // NAVIGATION HANDLERS WITH GUARDS
+  // ==========================================
+  const handleNavigation = (path) => {
+    if (isProjectDirty) {
+      setPendingNavigation(path);
+      setShowSaveConfirmModal(true);
+    } else {
+      navigate(path);
+    }
+  };
+
+  const handleLogoutInitiated = () => {
+    if (isProjectDirty) {
+      setPendingNavigation('logout');
+      setShowSaveConfirmModal(true);
+    } else {
+      setShowLogoutModal(true);
+    }
   };
 
   const handleLogin = (role, username, token) => {
@@ -173,7 +210,7 @@ export default function App() {
     navigate(role === 'encoder' ? '/disbursements' : '/cost-monitoring');
   };
 
-  const handleLogout = () => {
+  const executeLogout = () => {
     localStorage.removeItem('fbtmcc_token');
     localStorage.removeItem('fbtmcc_role');
     localStorage.removeItem('fbtmcc_username');
@@ -181,6 +218,7 @@ export default function App() {
     setInitialDisbursementSearch('');
     setInitialCostMonitoringProjectId(null);
     setIsAnyModalOpen(false);
+    setIsProjectDirty(false);
     
     setUserRole(null);
     setActiveUsername('');
@@ -188,15 +226,31 @@ export default function App() {
     navigate('/');
   };
 
+  // When user confirms password for navigation save
+  const handleAppPasswordConfirm = async () => {
+    setPasswordModal({ isOpen: false, action: null });
+    
+    if (pendingProjectData && initialCostMonitoringProjectId) {
+      await handleUpdateProject(initialCostMonitoringProjectId, pendingProjectData);
+    }
+
+    if (pendingNavigation === 'logout') {
+      executeLogout();
+    } else if (pendingNavigation) {
+      navigate(pendingNavigation);
+    }
+    setPendingNavigation(null);
+  };
+
   const navigateToCostMonitoring = (projectId) => {
     setInitialCostMonitoringProjectId(projectId);
-    navigate('/cost-monitoring');
+    handleNavigation('/cost-monitoring');
   };
 
   const navigateToDisbursement = (cvNo, disbursementId = null) => {
     setInitialDisbursementSearch(cvNo || '');
     setInitialDisbursementId(disbursementId);
-    navigate('/disbursements');
+    handleNavigation('/disbursements');
   };
 
   if (!userRole) return <LoginScreen onLogin={handleLogin} />;
@@ -223,12 +277,12 @@ export default function App() {
         </div>
 
         <nav className="flex-1 px-3 space-y-2 mt-4 overflow-y-auto custom-scrollbar">
-          <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/dashboard'} icon={<LayoutDashboard size={20} />} label="Dashboard" onClick={() => navigate('/dashboard')} />
-          <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/disbursements'} icon={<Receipt size={20} />} label="Disbursements" onClick={() => navigate('/disbursements')} />
-          <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/cost-monitoring'} icon={<BarChart3 size={20} />} label="Cost Monitoring" onClick={() => navigate('/cost-monitoring')} />
+          <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/dashboard'} icon={<LayoutDashboard size={20} />} label="Dashboard" onClick={() => handleNavigation('/dashboard')} />
+          <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/disbursements'} icon={<Receipt size={20} />} label="Disbursements" onClick={() => handleNavigation('/disbursements')} />
+          <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/cost-monitoring'} icon={<BarChart3 size={20} />} label="Cost Monitoring" onClick={() => handleNavigation('/cost-monitoring')} />
           
           {userRole === 'ceo' && (
-            <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/projects'} icon={<Settings size={20} />} label="Projects Setup" onClick={() => navigate('/projects')} />
+            <NavItem isSidebarOpen={isSidebarOpen} active={location.pathname === '/projects'} icon={<Settings size={20} />} label="Projects Setup" onClick={() => handleNavigation('/projects')} />
           )}
         </nav>
 
@@ -255,7 +309,7 @@ export default function App() {
             </button>
 
             <button 
-              onClick={() => setShowLogoutModal(true)} 
+              onClick={handleLogoutInitiated} 
               className={`flex-[3] flex items-center text-red-400 hover:text-red-300 hover:bg-red-500/10 dark:bg-red-950/20 dark:hover:bg-red-900/40 transition-colors bg-slate-800/50 rounded-md justify-center ${isSidebarOpen ? 'gap-2 p-2' : 'p-3'}`}
               title="Log out"
             >
@@ -300,7 +354,8 @@ export default function App() {
                 userRole={userRole} 
                 refreshData={fetchAllData} 
                 onNavigateToDisbursement={navigateToDisbursement}
-                onModalStateChange={setIsAnyModalOpen} 
+                onModalStateChange={setIsAnyModalOpen}
+                onDirtyChange={handleDirtyChange} // BAGO: Nagpapadala ng isDirty info pataas
               />
             } 
           />
@@ -327,6 +382,65 @@ export default function App() {
         onNavigateToProject={navigateToCostMonitoring}
       />
 
+      {/* UNSAVED CHANGES GUARD (NAVIGATION & LOGOUT) */}
+      {showSaveConfirmModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-[#0a0a0a] rounded-3xl shadow-2xl p-8 w-full max-w-sm border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200 text-center">
+            <div className="p-4 rounded-full mb-4 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 mx-auto w-fit">
+              <AlertCircle size={32} strokeWidth={2} />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">Unsaved Changes</h3>
+            <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium text-sm">
+              May mga binago ka sa project details. I-save muna bago {pendingNavigation === 'logout' ? 'mag log out' : 'lumipat'}?
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => {
+                  setShowSaveConfirmModal(false);
+                  setPasswordModal({ isOpen: true, action: 'save_nav' });
+                }} 
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-lg transition-all flex justify-center items-center gap-2"
+              >
+                <Save size={18} /> Save & Continue
+              </button>
+              <button 
+                onClick={() => { 
+                  setIsProjectDirty(false); 
+                  setShowSaveConfirmModal(false); 
+                  if (pendingNavigation === 'logout') { 
+                    executeLogout(); 
+                  } else { 
+                    navigate(pendingNavigation); 
+                  } 
+                }} 
+                className="w-full py-3 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 font-bold rounded-xl transition-colors flex justify-center items-center gap-2"
+              >
+                <Trash2 size={18} /> Discard Changes
+              </button>
+              <button 
+                onClick={() => {
+                  setShowSaveConfirmModal(false);
+                  setPendingNavigation(null);
+                }} 
+                className="w-full py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* APP-LEVEL PASSWORD CONFIRMATION MODAL */}
+      <div style={{ position: 'relative', zIndex: 9999 }}>
+        <PasswordConfirmModal
+          isOpen={passwordModal.isOpen}
+          actionType="update"
+          onClose={() => setPasswordModal({ isOpen: false, action: null })}
+          onConfirm={handleAppPasswordConfirm}
+        />
+      </div>
+
       {/* LOGOUT CONFIRMATION MODAL */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -347,7 +461,7 @@ export default function App() {
                   Cancel
                 </button>
                 <button 
-                  onClick={handleLogout}
+                  onClick={executeLogout}
                   className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-red-200 dark:shadow-none"
                 >
                   Yes, Log out
