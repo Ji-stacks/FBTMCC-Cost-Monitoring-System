@@ -1,11 +1,17 @@
-import { useState, useMemo, Fragment } from 'react';
-import { LayoutDashboard, Briefcase, Building2, ArrowLeft, TrendingUp, FileText, ZoomIn, ZoomOut, RotateCcw, Wallet, Receipt, Eye, EyeOff, Calendar, X } from 'lucide-react';
+import { useState, useMemo, Fragment, useRef } from 'react';
+import { LayoutDashboard, Briefcase, Building2, ArrowLeft, TrendingUp, FileText, ZoomIn, ZoomOut, RotateCcw, Wallet, Receipt, Eye, EyeOff, Calendar, X, Download, FileSpreadsheet } from 'lucide-react';
 
 export default function DashboardScreen({ projects = [], disbursements = [] }) {
   const [activeView, setActiveView] = useState('selection');
   
   // State para i-toggle ang Additional Works breakdown columns
   const [showAdditionalWorks, setShowAdditionalWorks] = useState(true);
+
+  // Loading states para sa exports
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  
+  const projectTableRef = useRef(null);
 
   // Date Filter States
   const [startDate, setStartDate] = useState('');
@@ -44,17 +50,171 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
   };
 
   // ==========================================
-  // DATE LABEL FORMATTER
+  // EXPORT TO EXCEL FUNCTION
   // ==========================================
-  const dateFilterLabel = useMemo(() => {
-    if (!startDate && !endDate) return null;
+  const downloadProjectExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      const XLSX = (await import('xlsx')).default;
+
+      // 1. Gumawa ng bagong workbook
+      const wb = XLSX.utils.book_new();
+      
+      // 2. Ihanda ang mga Rows (Headers at Data)
+      const excelRows = [];
+      
+      // Main Spreadsheet Header Title Block
+      excelRows.push(["FBTMCC - PROJECT MASTER SPREADSHEET"]);
+      excelRows.push([dateFilterLabel ? `Filter Period: ${dateFilterLabel}` : "Period: All-Time Records"]);
+      excelRows.push([]); // Empty spacer row
+
+      // Table Column Headers
+      excelRows.push([
+        "Code", "Store Name", "Contract Cost (CC)", 
+        "Additional Works Particulars", "Amount", "Total Additional (TAW)", 
+        "Total Contract (TCC)", "12% VAT of TCC", "CC without VAT",
+        "Overhead 30%", "Overhead 20%", "Overhead 12%",
+        "Target DLM @ 30%", "Target DLM @ 20%", "Target DLM @ 12%",
+        "Actual ADLM", "Saving @ 30%", "Saving @ 20%", "Saving @ 12%", "Remarks"
+      ]);
+
+      // 3. I-map ang projectData pormang akma sa Excel Sheet
+      projectData.forEach(p => {
+        const adds = p.additionalExpensesList || [];
+        
+        if (adds.length === 0) {
+          // Kung walang additional works, isang simpleng hilera lang
+          excelRows.push([
+            p.project_code, p.project_name, p.CC,
+            "-", 0, p.TAW, p.TCC, p.VAT_12, p.CC_WITHOUT_VAT,
+            p.OH_30, p.OH_20, p.OH_12,
+            p.TARGET_DLM_30, p.TARGET_DLM_20, p.TARGET_DLM_12,
+            p.ADLM, p.SAVING_30, p.SAVING_20, p.SAVING_12, "No Record"
+          ]);
+        } else {
+          // Kung may additional works, ibalat ito na parang sub-table sa excel
+          adds.forEach((add, idx) => {
+            if (idx === 0) {
+              excelRows.push([
+                p.project_code, p.project_name, p.CC,
+                add.particulars, add.amount, p.TAW, p.TCC, p.VAT_12, p.CC_WITHOUT_VAT,
+                p.OH_30, p.OH_20, p.OH_12,
+                p.TARGET_DLM_30, p.TARGET_DLM_20, p.TARGET_DLM_12,
+                p.ADLM, p.SAVING_30, p.SAVING_20, p.SAVING_12, "Active Works"
+              ]);
+            } else {
+              // Para sa susunod na additional rows, iwanang blangko ang pangunahing detalye
+              excelRows.push([
+                "", "", "",
+                add.particulars, add.amount, "", "", "", "",
+                "", "", "", "", "", "", "", "", "", "", ""
+              ]);
+            }
+          });
+          // Maglagay ng total ng additional sa dulo ng project block kung lampas sa isa ang item
+          if (adds.length > 1) {
+            excelRows.push([
+              "", "", "",
+              "Total Add'l Works Subtotal", p.TAW, "", "", "", "",
+              "", "", "", "", "", "", "", "", "", "", ""
+            ]);
+          }
+        }
+      });
+
+      // 4. I-convert ang raw arrays para maging worksheet
+      const ws = XLSX.utils.aoa_to_sheet(excelRows);
+      
+      // 5. I-kabit sa workbook at i-download
+      XLSX.utils.book_append_sheet(wb, ws, "Projects Master Ledger");
+      
+      const dateStr = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `PROJECT_MASTER_SPREADSHEET_${dateStr}.xlsx`);
+    } catch (error) {
+      console.error("Failed to export Excel file:", error);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  // ==========================================
+  // EXPORT TO PDF FUNCTION
+  // ==========================================
+  const downloadProjectPDF = async () => {
+    if (!projectTableRef.current) return;
     
+    try {
+      setIsExportingPDF(true);
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const element = projectTableRef.current;
+      
+      const canvas = await html2canvas(element, {
+        scale: 2, 
+        useCORS: true,
+        logging: false,
+        backgroundColor: document.documentElement.classList.contains('dark') ? '#0a0a0a' : '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: 2900 
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      
+      const dateStr = new Date().toISOString().split('T')[0];
+      pdf.save(`PROJECT_MASTER_SPREADSHEET_${dateStr}.pdf`);
+    } catch (error) {
+      console.error("Failed to export PDF:", error);
+    } finally { 
+      setIsExportingPDF(false);
+    }
+  };
+
+  // ==========================================
+  // DATE LABEL FORMATTER (Tinanggal ang useMemo)
+  // ==========================================
+  let dateFilterLabel = null;
+  if (startDate || endDate) {
     const formatOpts = { month: 'short', day: 'numeric', year: 'numeric' };
     const s = startDate ? new Date(startDate).toLocaleDateString('en-US', formatOpts) : 'Start';
     const e = endDate ? new Date(endDate).toLocaleDateString('en-US', formatOpts) : 'Present';
+    dateFilterLabel = `${s} to ${e}`;
+  }
+
+  // ==========================================
+  // PRE-FILTER DISBURSEMENTS BY DATE
+  // ==========================================
+  const filteredDisbursements = useMemo(() => {
+    if (!startDate && !endDate) return disbursements;
     
-    return `${s} to ${e}`;
-  }, [startDate, endDate]);
+    return disbursements.filter(d => {
+      if (!d.date) return false; 
+      const dDate = new Date(d.date);
+      dDate.setHours(0, 0, 0, 0);
+      
+      if (startDate) {
+        const sDate = new Date(startDate);
+        sDate.setHours(0, 0, 0, 0);
+        if (dDate < sDate) return false;
+      }
+      if (endDate) {
+        const eDate = new Date(endDate);
+        eDate.setHours(0, 0, 0, 0);
+        if (dDate > eDate) return false;
+      }
+      return true;
+    });
+  }, [disbursements, startDate, endDate]);
+
 
   // ==========================================
   // CALCULATIONS BASED ON YOUR TABLE IMAGES
@@ -67,32 +227,12 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
     let totalExp = 0;
 
     projects.forEach(p => {
-      // 1. Salain ang disbursement base sa petsa bago iproseso
-      const relevantDisbursements = disbursements.filter(d => {
-        if (!d.date) return false;
-        const dDate = new Date(d.date);
-        dDate.setHours(0, 0, 0, 0);
-        
-        if (startDate) {
-          const sDate = new Date(startDate);
-          sDate.setHours(0, 0, 0, 0);
-          if (dDate < sDate) return false;
-        }
-        if (endDate) {
-          const eDate = new Date(endDate);
-          eDate.setHours(0, 0, 0, 0);
-          if (dDate > eDate) return false;
-        }
-        return true;
-      });
-
-      const projDisbursements = relevantDisbursements.filter(d => 
+      const projExpenses = filteredDisbursements.filter(d => 
         d.project_code && d.project_code.toUpperCase() === p.project_code.toUpperCase()
       );
 
-      // Helper para kunin ang total ng isang specific category sa mga napiling petsa
       const getCategoryTotal = (keyword) => {
-        return projDisbursements.reduce((total, d) => {
+        return projExpenses.reduce((total, d) => {
           const lineTotal = (d.expenses || [])
             .filter(e => e.category && e.category.toLowerCase().includes(keyword.toLowerCase()))
             .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
@@ -100,11 +240,10 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
         }, 0);
       };
 
-      // 2. Kunin ang bawat Additional Works at ang Total mula sa filtered disbursements
       const additionalExpensesList = [];
       let TAW = 0;
       
-      projDisbursements.filter(d => d.costing_type === 'additional').forEach(d => {
+      projExpenses.filter(d => d.costing_type === 'additional').forEach(d => {
         (d.expenses || []).forEach(exp => {
           const amt = parseFloat(exp.amount) || 0;
           TAW += amt;
@@ -115,14 +254,13 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
         });
       });
 
-      const ADLM = projDisbursements
+      const ADLM = projExpenses
         .filter(d => d.costing_type === 'normal' || !d.costing_type)
         .reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => s + (parseFloat(exp.amount) || 0), 0), 0);
 
       const totalExpense = TAW + ADLM;
       totalExp += totalExpense; 
 
-      // --- FORMULAS FOR PROJECTS TABLE ---
       const CC = parseFloat(p.contract_cost) || 0;
       const TCC = CC + TAW;
       const VAT_12 = TCC * (1 - (1 / 1.12)); 
@@ -140,12 +278,10 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       const SAVING_20 = TARGET_DLM_20 - ADLM;
       const SAVING_12 = TARGET_DLM_12 - ADLM;
 
-      // --- FORMULAS FOR OFFICE TABLE ---
       const RETENTION_10 = TCC * 0.10;
       const CC_WO_VAT_OH_PM = CC_WITHOUT_VAT - OH_30; 
       const EFFECTIVE_OVERHEAD = OH_30; 
 
-      // SPECIFIC OFFICE EXPENSES
       const exp_payroll = getCategoryTotal('payroll') + getCategoryTotal('labor');
       const exp_electrical = getCategoryTotal('electrical');
       const exp_water = getCategoryTotal('water');
@@ -189,7 +325,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       projectTotalBudget: pBudget,
       totalCompanyExpenses: totalExp
     };
-  }, [projects, disbursements, startDate, endDate]);
+  }, [projects, filteredDisbursements]);
 
   const summaryCards = [
     { title: "Active Projects", value: `${projectData.length} Sites`, icon: <Briefcase size={28} />, colorClass: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-800" },
@@ -293,25 +429,25 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl mx-auto">
-              <button onClick={() => setActiveView('projects')} className="group bg-white dark:bg-[#0a0a0a] p-8 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500/50 transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
+              <button onClick={() => setActiveView('projects')} className="group bg-white dark:bg-[#0a0a0a] p-8 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:bg-indigo-50/30 dark:hover:bg-[#0f0f15] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 dark:bg-indigo-900/10 rounded-bl-[100px] -mr-16 -mt-16 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30 transition-colors"></div>
                 <div className="bg-slate-100 dark:bg-slate-900 p-5 rounded-2xl text-indigo-600 dark:text-indigo-400 mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner relative z-10"><Briefcase size={36} strokeWidth={2.5} /></div>
                 <h3 className="font-black text-2xl text-slate-800 dark:text-slate-100 relative z-10">Projects Analytics</h3>
-                <p className="text-slate-500 mt-3 font-medium text-sm relative z-10">Detailed cost monitoring, savings, and overhead breakdown for construction sites.</p>
+                <p className="text-slate-500 dark:text-slate-400 mt-3 font-medium text-sm relative z-10">Detailed cost monitoring, savings, and overhead breakdown for construction sites.</p>
               </button>
 
-              <button onClick={() => setActiveView('office')} className="group bg-white dark:bg-[#0a0a0a] p-8 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 hover:border-amber-500 dark:hover:border-amber-500/50 transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
+              <button onClick={() => setActiveView('office')} className="group bg-white dark:bg-[#0a0a0a] p-8 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 hover:border-amber-500 dark:hover:border-amber-500/50 hover:bg-amber-50/30 dark:hover:bg-[#141005] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 dark:bg-amber-900/10 rounded-bl-[100px] -mr-16 -mt-16 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30 transition-colors"></div>
                 <div className="bg-slate-100 dark:bg-slate-900 p-5 rounded-2xl text-amber-600 dark:text-amber-400 mb-6 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-inner relative z-10"><Building2 size={36} strokeWidth={2.5} /></div>
                 <h3 className="font-black text-2xl text-slate-800 dark:text-slate-100 relative z-10">Office & Admin</h3>
-                <p className="text-slate-500 mt-3 font-medium text-sm relative z-10">Internal operations, payroll, and maintenance tracking for the main office.</p>
+                <p className="text-slate-500 dark:text-slate-400 mt-3 font-medium text-sm relative z-10">Internal operations, payroll, and maintenance tracking for the main office.</p>
               </button>
             </div>
           </div>
         )}
 
         {/* ==============================================
-            VIEW 2: PROJECTS TABLE (WITH SUB-ROWS & TOGGLE)
+            VIEW 2: PROJECTS TABLE
         ============================================== */}
         {activeView === 'projects' && (
           <div className="animate-in slide-in-from-right-8 duration-500 space-y-6">
@@ -319,7 +455,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
               <ArrowLeft size={16} /> Back to Selection
             </button>
 
-            <section className="bg-white dark:bg-[#0a0a0a] rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-colors duration-300">
+            <section ref={projectTableRef} className="bg-white dark:bg-[#0a0a0a] rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-colors duration-300">
               <div className="px-8 py-4 bg-indigo-600 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4 flex-wrap">
                   <TrendingUp size={24} />
@@ -333,8 +469,38 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                   )}
                 </div>
                 
+                {/* CONTROLS AREA */}
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                  
+                  {/* BUTTON 1: EXCEL EXPORT */}
+                  <div className="relative group flex items-center justify-center">
+                    <button 
+                      onClick={downloadProjectExcel}
+                      disabled={isExportingExcel}
+                      className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl font-bold transition-all shadow-sm cursor-pointer"
+                    >
+                      <FileSpreadsheet size={16} className={`${isExportingExcel ? 'animate-pulse' : ''}`} />
+                    </button>
+                    <div className="absolute bottom-full mb-2 bg-slate-800 text-white text-[10px] font-bold py-1 px-2 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg border border-slate-700">
+                      {isExportingExcel ? 'Exporting Excel...' : 'Download as Excel (.xlsx)'}
+                    </div>
+                  </div>
 
+                  {/* BUTTON 2: PDF EXPORT */}
+                  <div className="relative group flex items-center justify-center">
+                    <button 
+                      onClick={downloadProjectPDF}
+                      disabled={isExportingPDF}
+                      className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl font-bold transition-all shadow-sm cursor-pointer"
+                    >
+                      <Download size={16} className={`${isExportingPDF ? 'animate-bounce' : ''}`} />
+                    </button>
+                    <div className="absolute bottom-full mb-2 bg-slate-800 text-white text-[10px] font-bold py-1 px-2 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg border border-slate-700">
+                      {isExportingPDF ? 'Generating PDF...' : 'Download as PDF'}
+                    </div>
+                  </div>
+
+                  {/* ZOOM MODULE */}
                   <div className="flex items-center bg-black/20 rounded-xl px-2 py-1 gap-1 backdrop-blur-sm border border-white/10">
                     <button onClick={handleZoomOut} className="p-1 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-30" disabled={zoomLevel <= 0.6}>
                       <ZoomOut size={16} />
@@ -518,7 +684,6 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                   </div>
                 </div>
                 
-                {/* ZOOM CONTROLS (OFFICE) */}
                 <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
                   <div className="text-[10px] font-bold opacity-80 uppercase tracking-[0.2em] hidden sm:block">Administrative Data</div>
                   <div className="flex items-center bg-black/20 rounded-xl px-2 py-1 gap-1 backdrop-blur-sm border border-white/10">
@@ -563,7 +728,6 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                       <th className="p-4 text-center font-bold border-r border-slate-300 dark:border-slate-700">Effective Overhead</th>
                       <th className="p-4 text-center">Total EOC per Month</th>
                       
-                      {/* SPECIFIC EXPENSES */}
                       <th className="p-4 text-center bg-slate-50 dark:bg-slate-800">Payroll</th>
                       <th className="p-4 text-center bg-slate-50 dark:bg-slate-800">Electrical Office/Payatas</th>
                       <th className="p-4 text-center bg-slate-50 dark:bg-slate-800">Water/office/Payatas</th>
