@@ -59,7 +59,7 @@ export default function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
 
       if (res.ok) {
         if (data.role !== selectedRole) {
-          setError(`Ang account na ito ay hindi para sa ${selectedRole.toUpperCase()} portal.`);
+          setError(`This account does not belong to the ${selectedRole.toUpperCase()} portal.`);
           setIsLoading(false);
           return;
         }
@@ -68,7 +68,7 @@ export default function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
         setError(data.error || 'Failed to login');
       }
     } catch {
-      setError('Hindi makakonekta sa server. I-check ang Local Network.');
+      setError('Unable to connect to the server. Please check your network connection.');
     } finally {
       setIsLoading(false);
     }
@@ -102,7 +102,7 @@ export default function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
     e.preventDefault();
     setError('');
     if (newPassword !== confirmPassword) {
-      return setError('Hindi magkapareho ang bagong password!');
+      return setError('New passwords do not match!');
     }
     setIsLoading(true);
     try {
@@ -113,7 +113,7 @@ export default function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
       });
       const data = await res.json();
       if (res.ok) {
-        setSuccessMsg('Password successfully changed! Pwede ka na mag-login.');
+        setSuccessMsg('Password successfully changed! You may now log in.');
         setTimeout(() => {
           setView('login');
           setSuccessMsg('');
@@ -291,18 +291,18 @@ export default function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
                 <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-700 pb-4">
                   <h2 className={`text-xl font-black ${t.text} uppercase mt-1`}>Account Recovery</h2>
                 </div>
-                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mb-4 text-center">Ilagay ang iyong Username para makuha ang iyong Security Question.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mb-4 text-center">Enter your username to retrieve your Security Question.</p>
                 <div className="space-y-1">
                   <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Username</label>
                   <input type="text" required value={resetUsername} onChange={e => setResetUsername(e.target.value)}
                     className={`w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:ring-2 ${t.ring} outline-none font-bold text-slate-700 dark:text-slate-200`}
-                    placeholder="Hal. encoder1" />
+                    placeholder="e.g. encoder1" />
                 </div>
                 <button type="submit" disabled={isLoading} className={`w-full py-4 ${t.bg} ${t.bgHover} text-white rounded-xl font-black tracking-wide shadow-lg ${t.shadow} transition-all disabled:opacity-70`}>
-                  {isLoading ? 'NAGHAHANAP...' : 'NEXT'}
+                  {isLoading ? 'SEARCHING...' : 'NEXT'}
                 </button>
                 <button type="button" onClick={() => setView('login')} className="w-full py-3 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-bold flex items-center justify-center gap-2">
-                  <ArrowLeft size={16} /> Bumalik sa Login
+                  <ArrowLeft size={16} /> Back to Login
                 </button>
               </form>
             )}
@@ -315,10 +315,10 @@ export default function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Ang iyong Sagot</label>
+                  <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">Your Answer</label>
                   <input type="text" required value={securityAnswer} onChange={e => setSecurityAnswer(e.target.value)}
                     className={`w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:ring-2 ${t.ring} outline-none font-bold text-slate-700 dark:text-slate-200`}
-                    placeholder="I-type ang sagot..." />
+                    placeholder="Type your answer..." />
                 </div>
 
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
@@ -343,10 +343,10 @@ export default function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
                 </div>
 
                 <button type="submit" disabled={isLoading} className={`w-full py-4 ${t.bg} ${t.bgHover} text-white rounded-xl font-black tracking-wide shadow-lg ${t.shadow} transition-all mt-4 disabled:opacity-70`}>
-                  {isLoading ? 'SINA-SAVE...' : 'RESET PASSWORD'}
+                  {isLoading ? 'SAVING...' : 'RESET PASSWORD'}
                 </button>
                 <button type="button" onClick={() => setView('login')} className="w-full py-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-bold flex items-center justify-center gap-2">
-                  I-cancel
+                  Cancel
                 </button>
               </form>
             )}

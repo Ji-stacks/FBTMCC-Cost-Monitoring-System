@@ -954,7 +954,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
               </div>
               <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2">Voucher Saved!</h3>
               <p className="text-slate-500 dark:text-slate-400 font-medium mb-8">
-                Ang disbursement voucher ay matagumpay na na-record sa ledger. Gusto mo bang magdagdag ng panibago?
+                The disbursement voucher has been successfully recorded in the ledger. Would you like to add a new one?
               </p>
               
               <div className="flex flex-col sm:flex-row w-full gap-3">
@@ -996,7 +996,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                     {editingId ? 'Edit Disbursement Voucher' : 'Disbursement Voucher Entry'}
                   </h2>
                   <p className="text-slate-500 dark:text-slate-400 text-xs">
-                    {editingId ? 'I-update ang detalye ng pondo at i-save.' : 'Kumpletuhin ang mga detalye ng pondo.'}
+                    {editingId ? 'Update the fund details and save.' : 'Complete all required fund details below.'}
                   </p>
                 </div>
               </div>
@@ -1062,7 +1062,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       />
                       {isDuplicateCV && (
                         <p className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1 animate-in slide-in-from-top-1">
-                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> Gamit na ang CV# na ito!
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> This CV# is already in use!
                         </p>
                       )}
                     </div>
@@ -1406,7 +1406,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                     <div className="mt-6 pt-4 border-t border-slate-700 dark:border-slate-800">
                       <div className="flex justify-between items-end mb-3">
                         <div>
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider mb-1">Target CIB (Mula Resibo)</div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider mb-1">Target CIB (From Receipt)</div>
                           <div className="text-lg font-bold text-slate-300 dark:text-white">₱ {targetCib.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
                         </div>
                         <div className="text-right">
@@ -1419,7 +1419,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
                       <div className={`p-3 rounded-lg flex items-center justify-between mb-4 border transition-colors ${isVarianceZero ? 'bg-emerald-500/10 border-emerald-500/30 dark:bg-emerald-900/20 dark:border-emerald-800' : 'bg-red-500/10 border-red-500/30 dark:bg-red-900/20 dark:border-red-800'}`}>
                          <span className={`text-xs font-bold uppercase ${isVarianceZero ? 'text-emerald-400 dark:text-emerald-500' : 'text-red-400 dark:text-red-500'}`}>
-                            {isVarianceZero ? '✓ Balanse' : '⚠️ Variance (Kulang/Sobra)'}
+                            {isVarianceZero ? '✓ Balanced' : '⚠️ Variance (Short/Over)'}
                          </span>
                          <span className={`font-mono font-bold ${isVarianceZero ? 'text-emerald-400 dark:text-emerald-500' : 'text-red-400 dark:text-red-500'}`}>
                             {(targetCib - totals.cib_coh) > 0 ? '+' : ''}{(targetCib - totals.cib_coh).toLocaleString(undefined, {minimumFractionDigits: 2})}
@@ -1437,10 +1437,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                               : 'bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 shadow-blue-900/20 dark:shadow-none'
                           }`}
                         >
-                          <Save size={18} /> {isSaving ? 'Nagsa-save...' : (editingId ? 'Update Disbursement' : 'Post Disbursement')}
+                          <Save size={18} /> {isSaving ? 'Saving...' : (editingId ? 'Update Disbursement' : 'Post Disbursement')}
                         </button>
                         <span className="text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hidden md:block">
-                          Maaari ring gamitin ang <kbd className="px-1.5 py-0.5 bg-slate-700 dark:bg-slate-800 rounded text-slate-300 dark:text-slate-400 border border-slate-600 dark:border-slate-700">CTRL + Enter</kbd>
+                          You can also use <kbd className="px-1.5 py-0.5 bg-slate-700 dark:bg-slate-800 rounded text-slate-300 dark:text-slate-400 border border-slate-600 dark:border-slate-700">CTRL + Enter</kbd>
                         </span>
                       </div>
                     </div>
@@ -1475,7 +1475,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       {(isSaving || isLoading) && (
         <LoadingOverlay 
           message={isSaving ? "Saving Entry" : "Refreshing Data"} 
-          subtext={isSaving ? "Paki-antay lamang..." : "Sina-sync ang inyong ledger..."} 
+          subtext={isSaving ? "Please wait a moment..." : "Syncing your ledger..."}  
         />
       )}
     </div>

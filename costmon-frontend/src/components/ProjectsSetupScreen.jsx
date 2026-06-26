@@ -627,7 +627,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
               <div>
                 <h3 className="text-2xl font-black text-slate-800 dark:text-white">Main Category Added!</h3>
                 <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">
-                  Bagong main category ay matagumpay na naidagdag.
+                  New main category has been successfully added.
                 </p>
               </div>
               <button onClick={() => setShowCategorySuccessModal(false)} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl shadow-lg shadow-amber-100 dark:shadow-none transition-all text-lg">
@@ -649,7 +649,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
               <div>
                 <h3 className="text-2xl font-black text-slate-800 dark:text-white">Sub-Category Added!</h3>
                 <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">
-                  Papasok ito sa loob ng Miscellaneous Cost table.
+                  It will appear under the Miscellaneous Cost table.
                 </p>
               </div>
               <button onClick={() => setShowSubCategorySuccessModal(false)} className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl shadow-lg shadow-teal-200 dark:shadow-none transition-all text-lg">
@@ -708,7 +708,7 @@ export default function ProjectsSetupScreen({ projects, categories, refreshData,
       {isSaving && (
         <LoadingOverlay 
           message="Updating System" 
-          subtext="Paki-antay habang sine-save ang changes..." 
+          subtext="Please wait while changes are being saved..." 
         />
       )}
     </div>
