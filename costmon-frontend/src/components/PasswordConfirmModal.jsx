@@ -46,7 +46,7 @@ export default function PasswordConfirmModal({ isOpen, onClose, onConfirm, actio
         setPassword('');
         setShowPassword(false);
       } else {
-        setError(data.error || 'Mali ang password.');
+        setError(data.error || 'Incorrect password.');
       }
     } catch {
       setError('Server connection error. Please check if the backend is running.');
@@ -75,7 +75,7 @@ export default function PasswordConfirmModal({ isOpen, onClose, onConfirm, actio
                 <AlertCircle size={14} /> Warning
               </p>
               <p className="text-xs font-bold text-rose-500 dark:text-rose-400 leading-relaxed">
-                Sigurado ka ba? Ang data na ito ay <span className="underline decoration-2">PERMANENTENG MABUBURA</span> at hindi na maaaring ma-recover.
+                Are you sure? This data will be <span className="underline decoration-2">PERMANENTLY DELETED</span> and cannot be recovered.
               </p>
             </div>
           ) : (
