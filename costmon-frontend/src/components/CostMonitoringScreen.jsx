@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { 
-  FileSpreadsheet, 
-  AlertCircle, 
+import {
+  FileSpreadsheet,
+  AlertCircle,
   Save,
   Calendar,
   Trash2,
@@ -33,13 +33,13 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId || projects[0]?.id || '');
-  
+
   // Modals and Animation states
   const [pulsingCategory, setPulsingCategory] = useState(null);
   const [isAdditionalsModalOpen, setIsAdditionalsModalOpen] = useState(false);
   const [isAddAdditionalModalOpen, setIsAddAdditionalModalOpen] = useState(false);
-  const [editingAdditionalId, setEditingAdditionalId] = useState(null); 
-  
+  const [editingAdditionalId, setEditingAdditionalId] = useState(null);
+
   // State for Project Unsaved Changes
   const [showProjectUnsavedModal, setShowProjectUnsavedModal] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState(null);
@@ -159,15 +159,15 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
   };
 
   const handleInputChange = (field, value) => setEditingValues(prev => ({ ...prev, [field]: value }));
-  const handleSaveClick = () => { 
-    if (!canEdit) return; 
+  const handleSaveClick = () => {
+    if (!canEdit) return;
     executeSaveProject({ ...editingValues, contract_cost: String(editingValues.contract_cost).replace(/,/g, '') });
   };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault(); 
+        e.preventDefault();
         if (!isSaving && canEdit && !passwordModal.isOpen && !redirectionModal.isOpen && !isAdditionalsModalOpen && !isAddAdditionalModalOpen && !showProjectUnsavedModal) handleSaveClick();
       }
     };
@@ -179,9 +179,9 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     if (!canEdit) return;
     const disbursement = disbursements.find(d => d.id === id);
     if (disbursement?.costing_type === 'additional') {
-       setPasswordModal({ isOpen: true, action: 'delete_additional', payload: id });
+      setPasswordModal({ isOpen: true, action: 'delete_additional', payload: id });
     } else {
-       setRedirectionModal({ isOpen: true, disbursementId: id, cvNo: disbursement?.cv_no || '' });
+      setRedirectionModal({ isOpen: true, disbursementId: id, cvNo: disbursement?.cv_no || '' });
     }
   };
 
@@ -217,10 +217,10 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
       setIsSaving(true);
       try {
         const token = localStorage.getItem('fbtmcc_token');
-        const response = await fetch(`${API_URL}/disbursements/${passwordModal.payload}`, { 
+        const response = await fetch(`${API_URL}/disbursements/${passwordModal.payload}`, {
           method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (response.ok) { if(refreshData) await refreshData(); }
+        if (response.ok) { if (refreshData) await refreshData(); }
       } catch (error) { console.error("Failed to delete additional cost:", error); } finally { setIsSaving(false); }
     }
     setPasswordModal({ isOpen: false, action: null, payload: null });
@@ -238,7 +238,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     const totalNormalExpenses = normalExpenses.reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => s + (parseFloat(exp.amount) || 0), 0), 0);
     const totalAdditionalExpenses = additionalExpenses.reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => s + (parseFloat(exp.amount) || 0), 0), 0);
 
-    const vatNormal = contractCost * (1 - (1 / 1.12)); 
+    const vatNormal = contractCost * (1 - (1 / 1.12));
     const budgetCostNormal = contractCost - vatNormal;
     const profitAmountNormal = budgetCostNormal * (1 - (1 / (1 + profitPercent)));
     const budgetCostLimitNormal = budgetCostNormal - profitAmountNormal;
@@ -248,9 +248,9 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     const budgetCostAdditional = totalAdditionalExpenses - vatAdditional;
     const profitAmountAdditional = budgetCostAdditional * (1 - (1 / (1 + profitPercent)));
     const budgetCostLimitAdditional = budgetCostAdditional - profitAmountAdditional;
-    const excessBudgetAdditional = budgetCostLimitAdditional; 
+    const excessBudgetAdditional = budgetCostLimitAdditional;
 
-    return { 
+    return {
       contractCost, vatAmount: vatNormal, budgetCost: budgetCostNormal, profitAmount: profitAmountNormal, profitPercent, budgetCostLimit: budgetCostLimitNormal, totalNormalExpenses, excessBudget: excessBudgetNormal,
       vatAdditional, budgetCostAdditional, profitAmountAdditional, budgetCostLimitAdditional, totalAdditionalExpenses, excessBudgetAdditional,
       contractOverall: contractCost + totalAdditionalExpenses, vatOverall: vatNormal + vatAdditional, budgetOverall: budgetCostNormal + budgetCostAdditional, profitOverall: profitAmountNormal + profitAmountAdditional, limitOverall: budgetCostLimitNormal + budgetCostLimitAdditional, progressOverall: totalNormalExpenses, excessOverall: excessBudgetNormal + excessBudgetAdditional,
@@ -258,7 +258,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     };
   }, [editingValues, disbursements, project]);
 
-  const REQUIRED_CATEGORIES = useMemo(() => [ "PERMITS & CONSTRUCTION PLANS", "DOWN PAYMENT", "CARPENTRY", "PAINTING", "ELECTRICAL", "PLUMBING", "TEMPERED GLASS", "SSS/PAG-IBIG / PHILHEALTH", "MISCELLANEOUS COST", "LABOR/PAYROLL", "ABB 1196 FORWARD", "ZAM-546" ], []);
+  const REQUIRED_CATEGORIES = useMemo(() => ["PERMITS & CONSTRUCTION PLANS", "DOWN PAYMENT", "CARPENTRY", "PAINTING", "ELECTRICAL", "PLUMBING", "TEMPERED GLASS", "SSS/PAG-IBIG / PHILHEALTH", "MISCELLANEOUS COST", "LABOR/PAYROLL", "ABB 1196 FORWARD", "ZAM-546"], []);
 
   const expensesByCategory = useMemo(() => {
     const grouped = {};
@@ -271,7 +271,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
           const matchedCat = REQUIRED_CATEGORIES.find(c => c.toUpperCase() === catUpper);
           const targetCat = matchedCat ? matchedCat : "MISCELLANEOUS COST";
           if (!grouped[targetCat]) grouped[targetCat] = [];
-          
+
           const amount = parseFloat(exp.amount) || 0;
           let itemDesc = exp.particulars || '';
           if (!matchedCat && targetCat === "MISCELLANEOUS COST") itemDesc = `[${originalCat}] ${itemDesc}`;
@@ -307,16 +307,16 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
   const filteredDisplayedCategories = useMemo(() => selectedCategories.includes('All') ? displayedCategories : displayedCategories.filter(cat => selectedCategories.includes(cat)), [displayedCategories, selectedCategories]);
 
   const categoryColorMap = useMemo(() => {
-    const colorPalette = [ 'bg-blue-600', 'bg-red-600', 'bg-emerald-600', 'bg-amber-500', 'bg-purple-600', 'bg-teal-600', 'bg-indigo-600', 'bg-orange-600', 'bg-cyan-600', 'bg-pink-600', 'bg-rose-700', 'bg-sky-600', 'bg-fuchsia-600', 'bg-lime-600' ];
+    const colorPalette = ['bg-blue-600', 'bg-red-600', 'bg-emerald-600', 'bg-amber-500', 'bg-purple-600', 'bg-teal-600', 'bg-indigo-600', 'bg-orange-600', 'bg-cyan-600', 'bg-pink-600', 'bg-rose-700', 'bg-sky-600', 'bg-fuchsia-600', 'bg-lime-600'];
     const map = {};
     REQUIRED_CATEGORIES.forEach((category, index) => { map[category] = colorPalette[index % colorPalette.length]; });
     return map;
   }, [REQUIRED_CATEGORIES]);
 
   const formatMoney = (val) => {
-    if (val === null || val === undefined || val === '') return '-'; 
+    if (val === null || val === undefined || val === '') return '-';
     if (isNaN(val)) return '0.00';
-    if (val === 0) return '-'; 
+    if (val === 0) return '-';
     return Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
@@ -345,7 +345,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] dark:bg-slate-900 overflow-hidden relative transition-colors duration-300">
-      
+
       {/* HEADER SECTION */}
       <header className="bg-white dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-sm z-10 transition-colors duration-300">
         <div>
@@ -362,26 +362,26 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
           <SearchableDropdown
             options={projects.map(p => `${p.project_code} — ${p.project_name}`)}
             value={project ? `${project.project_code} — ${project.project_name}` : ''}
-            onChange={handleProjectDropdownChange} 
+            onChange={handleProjectDropdownChange}
             placeholder="-- Maghanap ng Project --"
           />
         </div>
       </header>
 
       <main ref={mainScrollRef} onScroll={handleMainScroll} className="flex-1 overflow-y-auto p-8 space-y-8 relative scroll-smooth custom-scrollbar">
-        
+
         {/* ==============================================
             MODERNIZED PROJECT PROGRESS COSTING BOX
         ============================================== */}
         <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
           <div className="bg-white dark:bg-slate-800 border-2 border-slate-400 dark:border-slate-600 rounded-[2rem] shadow-xl min-w-[1100px] overflow-hidden flex flex-col transition-colors duration-300">
-            
+
             <div className="bg-slate-800 dark:bg-slate-900 text-center py-4 text-white uppercase tracking-[0.2em] text-sm font-black shadow-md flex items-center justify-center gap-3 relative z-10">
               <Calculator size={18} /> PROJECT PROGRESS COSTING
             </div>
-            
+
             <div className="flex flex-row flex-1">
-              
+
               {/* LEFT SIDE: BASIC INFO & BUDGET LIMIT */}
               <div className="w-[420px] shrink-0 border-r-2 border-slate-400 dark:border-slate-600 p-8 bg-slate-50/80 dark:bg-slate-800/80 flex flex-col gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors duration-300">
                 <div className="grid grid-cols-[140px_1fr] items-center py-1">
@@ -392,20 +392,20 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">Project Name:</span>
                   <span className="font-black text-slate-800 dark:text-white">{project?.project_name || '---'}</span>
                 </div>
-                
+
                 <div className="grid grid-cols-[140px_1fr] items-center mt-2">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">Project Area:</span>
-                  <input type="text" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white" 
+                  <input type="text" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white"
                     value={editingValues.project_area} onChange={e => handleInputChange('project_area', e.target.value)} placeholder="e.g. 150 sqm" />
                 </div>
                 <div className="grid grid-cols-[140px_1fr] items-center mt-2">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">Project Start:</span>
-                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white" 
+                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white"
                     value={editingValues.project_start} onChange={e => handleInputChange('project_start', e.target.value)} />
                 </div>
                 <div className="grid grid-cols-[140px_1fr] items-center mt-2 mb-6">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">40 Days End:</span>
-                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white" 
+                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white"
                     value={editingValues.days_end} onChange={e => handleInputChange('days_end', e.target.value)} />
                 </div>
 
@@ -415,7 +415,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">Contract Cost:</span>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-700 dark:text-amber-500">₱</span>
-                    <input type="text" className="w-full bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-400 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-amber-500 outline-none shadow-sm text-right font-black text-sm" 
+                    <input type="text" className="w-full bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-400 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-amber-500 outline-none shadow-sm text-right font-black text-sm"
                       value={editingValues.contract_cost} onChange={e => {
                         let val = e.target.value.replace(/[^0-9.]/g, '');
                         const parts = val.split('.');
@@ -439,7 +439,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                 </div>
                 <div className="grid grid-cols-[140px_1fr] items-center mt-1">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    Profit @ <input type="number" className="w-12 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-md px-1 py-1 focus:ring-2 focus:ring-blue-500 outline-none text-center shadow-sm text-slate-800 dark:text-white" 
+                    Profit @ <input type="number" className="w-12 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-md px-1 py-1 focus:ring-2 focus:ring-blue-500 outline-none text-center shadow-sm text-slate-800 dark:text-white"
                       value={(editingValues.profit_percentage * 100).toFixed(0)} onChange={e => handleInputChange('profit_percentage', parseFloat(e.target.value) / 100)} />%
                   </span>
                   <span className="text-right font-mono text-sm pr-3 text-emerald-700 dark:text-emerald-400 font-black">{formatMoney(financials.profitAmount)}</span>
@@ -485,14 +485,14 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
               {/* RIGHT SIDE: BREAKDOWNS & SUMMARY TABLE */}
               <div className="flex flex-col flex-1 bg-white dark:bg-slate-800 transition-colors duration-300">
                 <div className="flex flex-row flex-1">
-                  
+
                   {/* Progress-Based Column */}
                   <div className="flex-1 border-r-2 border-slate-400 dark:border-slate-600 flex flex-col">
                     <div className="bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-400 text-center font-black text-xs uppercase py-3 border-b-2 border-slate-400 dark:border-slate-600 tracking-wider">Progress-Based Costing</div>
                     <div className="p-6 space-y-3 text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex-1 flex flex-col">
-                      {[ "PERMITS & CONSTRUCTION PLANS", "DOWN PAYMENT", "CARPENTRY", "PAINTING", "ELECTRICAL", "PLUMBING", "TEMPERED GLASS", "MISCELLANEOUS COST", "LABOR/PAYROLL" ].map(cat => {
+                      {["PERMITS & CONSTRUCTION PLANS", "DOWN PAYMENT", "CARPENTRY", "PAINTING", "ELECTRICAL", "PLUMBING", "TEMPERED GLASS", "MISCELLANEOUS COST", "LABOR/PAYROLL"].map(cat => {
                         const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.amount, 0) || 0;
-                        if (catTotal === 0) return null; 
+                        if (catTotal === 0) return null;
                         return (
                           <div key={cat} className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
                             <span className="truncate pr-2">{cat === "PERMITS & CONSTRUCTION PLANS" ? "Permits & Const'n Plans" : cat.charAt(0) + cat.slice(1).toLowerCase()}:</span>
@@ -500,11 +500,11 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                           </div>
                         );
                       })}
-                      
+
                       <div className="pt-2 text-[10px] text-slate-500 dark:text-slate-400 space-y-2">
                         {["ABB 1196 FORWARD", "ZAM-546"].map(cat => {
                           const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.amount, 0) || 0;
-                          if (catTotal === 0) return null; 
+                          if (catTotal === 0) return null;
                           return (
                             <div key={cat} className="flex justify-between">
                               <span>{cat === "ABB 1196 FORWARD" ? "ABB Forward" : "ZAM 546"}</span><span className="font-mono">{formatMoney(catTotal)}</span>
@@ -514,8 +514,8 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                       </div>
 
                       <div className="mt-auto pt-4 flex justify-between items-center border-t-2 border-slate-400 dark:border-slate-600">
-                         <span className="font-black tracking-wider">DIRECT COST</span>
-                         <span className="font-black font-mono text-sm text-slate-900 dark:text-white">{formatMoney(Object.values(expensesByCategory).flat().reduce((sum, item) => sum + item.amount, 0))}</span>
+                        <span className="font-black tracking-wider">DIRECT COST</span>
+                        <span className="font-black font-mono text-sm text-slate-900 dark:text-white">{formatMoney(Object.values(expensesByCategory).flat().reduce((sum, item) => sum + item.amount, 0))}</span>
                       </div>
                     </div>
                   </div>
@@ -524,7 +524,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                   <div className="flex-1 flex flex-col bg-slate-50/50 dark:bg-slate-800/50">
                     <div className="bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-400 text-center font-black text-xs uppercase py-3 border-b-2 border-slate-400 dark:border-slate-600 tracking-wider">Additional-Based Costing</div>
                     <div className="p-6 space-y-3 text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex-1 flex flex-col">
-                      
+
                       {/* SIMPLIFIED SIDEBAR AS REQUESTED IN IMAGE */}
                       <div className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2 pl-4 text-slate-800 dark:text-white font-black mt-2">
                         <span>Total Additional</span><span className="font-mono text-red-600 dark:text-red-400">{formatMoney(financials.totalAdditionalExpenses)}</span>
@@ -534,18 +534,18 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                       </div>
 
                       <div className="mt-auto pt-4 flex justify-between items-center border-t-2 border-slate-400 dark:border-slate-600 text-slate-600 dark:text-slate-300">
-                         <span className="font-black tracking-wider text-red-800 dark:text-red-400 uppercase">Add'l Cost Limit</span>
-                         <span className="font-black font-mono text-sm text-red-700 dark:text-red-400">{formatMoney(financials.budgetCostAdditional)}</span>
+                        <span className="font-black tracking-wider text-red-800 dark:text-red-400 uppercase">Add'l Cost Limit</span>
+                        <span className="font-black font-mono text-sm text-red-700 dark:text-red-400">{formatMoney(financials.budgetCostAdditional)}</span>
                       </div>
-                      
+
                       <div className="mt-2 pt-2 border-t border-red-200/50 dark:border-red-900/30 flex gap-2">
-                        <button 
+                        <button
                           onClick={() => setIsAdditionalsModalOpen(true)}
                           disabled={flatAdditionalExpenses.length === 0}
                           className="flex-1 py-2 bg-red-100 dark:bg-red-900/20 hover:bg-red-200 dark:hover:bg-red-900/40 text-red-700 dark:text-red-400 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border border-red-200 dark:border-red-800"
                         ><FileSpreadsheet size={14} /> View Ledger</button>
                         {canEdit && (
-                          <button 
+                          <button
                             onClick={handleOpenAddAdditional}
                             className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md shadow-red-200 dark:shadow-none"
                           ><Plus size={14} /> Add Costing</button>
@@ -799,7 +799,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
               May mga binago ka sa project details na hindi pa nase-save. Gusto mo bang i-save bago lumipat ng project?
             </p>
             <div className="space-y-3">
-              <button 
+              <button
                 onClick={async () => {
                   await executeSaveProject(editingValues);
                   setShowProjectUnsavedModal(false);
@@ -810,7 +810,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
               >
                 <Save size={18} /> Save Changes & Switch
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setShowProjectUnsavedModal(false);
                   setSelectedProjectId(pendingProjectId);
@@ -820,7 +820,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
               >
                 <Trash2 size={18} /> Discard & Switch
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setShowProjectUnsavedModal(false);
                   setPendingProjectId(null);
@@ -855,24 +855,24 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
       )}
 
       {/* ADDITIONAL WORKS LEDGER MODAL (FLAT LIST WITH REMOVED EXTRA COLUMNS) */}
-      <AdditionalsLedgerModal 
-        isOpen={isAdditionalsModalOpen} 
-        onClose={() => setIsAdditionalsModalOpen(false)} 
-        data={flatAdditionalExpenses} 
+      <AdditionalsLedgerModal
+        isOpen={isAdditionalsModalOpen}
+        onClose={() => setIsAdditionalsModalOpen(false)}
+        data={flatAdditionalExpenses}
         canEdit={canEdit}
         onDeleteClick={handleDeleteClick}
         onEditClick={handleEditAdditionalClick}
-        zoomLevel={zoomLevel} 
+        zoomLevel={zoomLevel}
       />
 
       {/* ADD / EDIT ADDITIONAL COST MODAL WITH UNSAVED & DRAFT FUNCTIONALITY */}
-      <AddAdditionalModal 
+      <AddAdditionalModal
         isOpen={isAddAdditionalModalOpen}
         onClose={() => setIsAddAdditionalModalOpen(false)}
         project={project}
         disbursements={disbursements}
         refreshData={refreshData}
-        editingAdditionalId={editingAdditionalId} 
+        editingAdditionalId={editingAdditionalId}
       />
     </div>
   );
@@ -886,9 +886,9 @@ function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick,
 
   const totalAmount = data.reduce((sum, item) => sum + item.amount, 0);
   const formatMoney = (val) => {
-    if (val === null || val === undefined || val === '') return '-'; 
+    if (val === null || val === undefined || val === '') return '-';
     if (isNaN(val)) return '0.00';
-    if (val === 0) return '-'; 
+    if (val === 0) return '-';
     return Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
@@ -906,7 +906,7 @@ function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick,
             <X size={24} />
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar mt-4 pb-4">
           <div className="flex flex-col gap-8 min-w-[900px]">
             {data.length === 0 ? (
@@ -928,23 +928,23 @@ function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick,
                   </thead>
                   <tbody className="divide-y divide-slate-800 dark:divide-slate-700 bg-white dark:bg-slate-900">
                     {data.map((item, i) => (
-                      <tr 
-                        key={`${item.id}-${i}`} 
+                      <tr
+                        key={`${item.id}-${i}`}
                         className={`hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-[11px] ${canEdit ? 'cursor-pointer group' : ''}`}
                         onDoubleClick={() => canEdit && onEditClick(item.id)}
                       >
                         <td className="p-4 text-center font-bold text-slate-700 dark:text-slate-300 border-r border-slate-800 dark:border-slate-700">{item.date}</td>
                         <td className="p-4 text-center font-mono font-bold text-slate-700 dark:text-slate-300 border-r border-slate-800 dark:border-slate-700">{item.or_inv_no || '-'}</td>
-                        
+
                         <td className="p-4 font-bold text-slate-800 dark:text-slate-200 text-left border-r border-slate-800 dark:border-slate-700" title={`${item.payee} - ${item.particulars}`}>
                           <div className="flex flex-col gap-0.5">
                             <span className="truncate max-w-[250px]">{item.payee}</span>
                             {item.particulars && <span className="text-[9px] text-slate-500 font-medium truncate max-w-[250px]">{item.particulars}</span>}
                           </div>
                         </td>
-                        
+
                         <td className="p-4 font-black text-red-700 dark:text-red-400 text-left border-r border-slate-800 dark:border-slate-700 truncate max-w-[250px]" title={item.itemName}>{item.itemName}</td>
-                        
+
                         <td className="p-4 text-right pr-6 font-mono font-black text-slate-900 dark:text-white border-r border-slate-800 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/80 text-sm">
                           {formatMoney(item.amount)}
                         </td>
@@ -952,16 +952,16 @@ function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick,
                         {canEdit && (
                           <td className="p-2 text-center bg-white dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800 transition-colors">
                             <div className="flex items-center justify-center gap-2">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); onEditClick(item.id); }} 
-                                className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 rounded-lg transition-colors" 
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onEditClick(item.id); }}
+                                className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 rounded-lg transition-colors"
                                 title="Edit Entry"
                               >
                                 <Edit2 size={16} />
                               </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); onDeleteClick(item.id); }} 
-                                className="p-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 rounded-lg transition-colors" 
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onDeleteClick(item.id); }}
+                                className="p-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 rounded-lg transition-colors"
                                 title="Delete Entry"
                               >
                                 <Trash2 size={16} />
@@ -992,7 +992,7 @@ function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick,
           <div className="flex items-baseline gap-3">
             <span className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Grand Total Additionals:</span>
             <span className="text-3xl font-black text-red-700 dark:text-red-400 font-mono">
-              ₱ {totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}
+              ₱ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -1017,7 +1017,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successPrompt, setSuccessPrompt] = useState(false);
-  
+
   // DEDICATED MODALS FOR DRAFTS, UNSAVED, AND PASSWORD
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, payload: null });
   const [initialFormState, setInitialFormState] = useState(null);
@@ -1057,12 +1057,12 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
           target_cib: (editingData.target_cib || '').toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','),
           costing_type: 'additional'
         };
-        const newLines = editingData.expenses?.length > 0 ? editingData.expenses.map(line => ({...line, amount: line.amount ? String(line.amount).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''})) : [{ id: Date.now(), category: '', amount: '' }];
-        
+        const newLines = editingData.expenses?.length > 0 ? editingData.expenses.map(line => ({ ...line, amount: line.amount ? String(line.amount).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '' })) : [{ id: Date.now(), category: '', amount: '' }];
+
         setHeaderData(newHeader);
         setLines(newLines);
         setShowTaxFields(!!(editingData.accts_pay || editingData.input_tax || editingData.output_tax));
-        
+
         setInitialFormState({
           headerData: JSON.stringify(newHeader),
           lines: JSON.stringify(newLines)
@@ -1092,8 +1092,8 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
 
   const checkUnsavedChanges = () => {
     if (!initialFormState) return false;
-    return JSON.stringify(headerData) !== initialFormState.headerData || 
-           JSON.stringify(lines) !== initialFormState.lines;
+    return JSON.stringify(headerData) !== initialFormState.headerData ||
+      JSON.stringify(lines) !== initialFormState.lines;
   };
 
   const handleCloseRequest = () => {
@@ -1115,8 +1115,8 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
   }, [isOpen, passwordModal.isOpen, showUnsavedModal, showDraftModal, successPrompt, headerData, lines, initialFormState]);
 
   const handleSaveDraft = () => {
-    localStorage.setItem('additional_cost_draft', JSON.stringify({ 
-      headerData, lines, editingAdditionalId 
+    localStorage.setItem('additional_cost_draft', JSON.stringify({
+      headerData, lines, editingAdditionalId
     }));
     setShowUnsavedModal(false);
     handleClose();
@@ -1185,12 +1185,15 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
 
   const totals = useMemo(() => {
     let totalDebit = 0; let ewtPayable = 0;
-    lines.forEach(line => { 
+    lines.forEach(line => {
       const amt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
       totalDebit += amt;
-      if (line.category === 'Labor /SUBCONTRACTOR') ewtPayable += (amt * 0.02);
+      const cat = line.category ? line.category.toUpperCase() : '';
+      if (cat === 'LABOR /SUBCONTRACTOR' || cat === 'LABOR/PAYROLL') {
+        ewtPayable += (amt / 0.98) - amt;
+      }
     });
-    return { totalDebit, ewtPayable, cib_coh: totalDebit - ewtPayable };
+    return { totalDebit, ewtPayable, cib_coh: totalDebit + ewtPayable };
   }, [lines]);
 
   const targetCib = parseFloat(String(headerData.target_cib).replace(/,/g, '')) || 0;
@@ -1232,14 +1235,14 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
 
     const isEditing = !!editingData;
     const newDisbursement = {
-      id: isEditing ? editingData.id : Date.now().toString(36) + Math.floor(Math.random()*1000).toString(),
+      id: isEditing ? editingData.id : Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(),
       ...headerData,
       target_cib: String(headerData.target_cib).replace(/,/g, ''),
-      cv_no: isEditing ? (editingData.cv_no || '') : '', 
+      cv_no: isEditing ? (editingData.cv_no || '') : '',
       expenses: validLines,
-      gross_amount: totals.totalDebit,
+      gross_amount: totals.cib_coh,
       ewt_amount: totals.ewtPayable,
-      net_amount: totals.cib_coh,
+      net_amount: totals.totalDebit,
       created_at: isEditing ? editingData.created_at : new Date().toISOString()
     };
 
@@ -1250,7 +1253,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
 
   return (
     <div className="fixed inset-0 z-[45] flex justify-center items-start pt-6 pb-6 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm px-4 overflow-hidden transition-colors duration-300">
-      
+
       {/* FLOATING PASSWORD MODAL PARA SA EDIT/UPDATE NG ADDITIONAL */}
       <div style={{ position: 'relative', zIndex: 9999 }}>
         <PasswordConfirmModal
@@ -1293,7 +1296,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
         </div>
       ) : (
         <div className="bg-slate-50 dark:bg-slate-900 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-full border-2 border-red-300 dark:border-red-900">
-          
+
           <div className="bg-white dark:bg-slate-800 px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
@@ -1313,7 +1316,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
-              
+
               {errorMessage && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-700 dark:text-red-400 p-4 rounded-xl text-sm font-medium animate-in fade-in">
                   {errorMessage}
@@ -1351,7 +1354,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
                     <input type="text" name="particulars" className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                       value={headerData.particulars} onChange={handleHeaderChange} />
                   </div>
-                  
+
                   <div className="space-y-1 bg-red-50 dark:bg-red-900/20 p-2 -mt-2 -mb-2 rounded-md border border-red-200 dark:border-red-800 flex flex-col justify-center">
                     <label className="text-xs font-bold text-red-800 dark:text-red-300 uppercase">Target CIB/COH (₱)</label>
                     <input type="text" name="target_cib" className="w-full p-1.5 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-700 rounded-md text-sm font-black text-red-900 dark:text-red-100 outline-none focus:ring-2 focus:ring-red-500"
@@ -1370,7 +1373,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
 
                   <div className="space-y-1 md:col-span-4 flex items-end">
                     <button type="button" onClick={() => setShowTaxFields(!showTaxFields)} className="text-slate-500 dark:text-slate-400 text-xs font-medium hover:underline flex items-center gap-1">
-                      {showTaxFields ? 'Hide Tax Fields' : 'Show Tax Fields'} <ChevronDown size={14}/>
+                      {showTaxFields ? 'Hide Tax Fields' : 'Show Tax Fields'} <ChevronDown size={14} />
                     </button>
                   </div>
                 </div>
@@ -1407,15 +1410,15 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
                       {lines.map((line, index) => (
                         <div key={line.id} className="flex gap-3 items-start">
                           <div className="w-8 h-9 mt-1 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded flex items-center justify-center text-xs font-bold text-slate-400 shrink-0">{index + 1}</div>
-                          
+
                           <div className="flex-1 relative mt-1">
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               list="historical-additional-items"
-                              placeholder="Type Item Name (e.g. Specialty Works)" 
+                              placeholder="Type Item Name (e.g. Specialty Works)"
                               className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-                              value={line.category} 
-                              onChange={(e) => handleLineChange(line.id, 'category', e.target.value)} 
+                              value={line.category}
+                              onChange={(e) => handleLineChange(line.id, 'category', e.target.value)}
                             />
                             <datalist id="historical-additional-items">
                               {historicalSuggestions.map(suggestion => (
@@ -1426,7 +1429,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
 
                           <div className="w-40 relative mt-1">
                             <span className="absolute left-3 top-2 text-slate-400">₱</span>
-                            <input type="text" placeholder="0.00" 
+                            <input type="text" placeholder="0.00"
                               className="w-full pl-7 p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-right"
                               value={line.amount} onChange={(e) => handleLineChange(line.id, 'amount', e.target.value)} />
                           </div>
@@ -1445,12 +1448,12 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
                     <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 pb-2 border-b border-slate-700">Summary</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center text-sm">
-                        <span>Total (Gross)</span>
-                        <span className="font-mono">₱ {totals.totalDebit.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                        <span>Total (Net)</span>
+                        <span className="font-mono">₱ {totals.totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       </div>
-                      <div className="flex justify-between items-center text-rose-300 text-sm">
-                        <span>Less: EWT</span>
-                        <span className="font-mono">- ₱ {totals.ewtPayable.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                      <div className="flex justify-between items-center text-emerald-400 text-sm">
+                        <span>Add: EWT</span>
+                        <span className="font-mono">+ ₱ {totals.ewtPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   </div>
@@ -1459,19 +1462,19 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
                     <div className="flex justify-between items-end mb-3">
                       <div>
                         <div className="text-[10px] text-slate-400 font-semibold uppercase mb-1">Target CIB</div>
-                        <div className="text-lg font-bold">₱ {targetCib.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                        <div className="text-lg font-bold">₱ {targetCib.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-[10px] text-blue-400 font-semibold uppercase mb-1">Computed CIB</div>
-                        <div className="text-2xl font-black text-blue-400 tracking-tight">₱ {totals.cib_coh.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                        <div className="text-2xl font-black text-blue-400 tracking-tight">₱ {totals.cib_coh.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                       </div>
                     </div>
 
                     <div className={`p-3 rounded-lg flex items-center justify-between mb-4 border ${isVarianceZero ? 'bg-emerald-900/20 border-emerald-800 text-emerald-400' : 'bg-red-900/20 border-red-800 text-red-400'}`}>
-                       <span className="text-xs font-bold uppercase">{isVarianceZero ? '✓ Balanse' : '⚠️ Variance'}</span>
-                       <span className="font-mono font-bold">{(targetCib - totals.cib_coh) > 0 ? '+' : ''}{(targetCib - totals.cib_coh).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                      <span className="text-xs font-bold uppercase">{isVarianceZero ? '✓ Balance' : '⚠️ Variance'}</span>
+                      <span className="font-mono font-bold">{(targetCib - totals.cib_coh) > 0 ? '+' : ''}{(targetCib - totals.cib_coh).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
-                    
+
                     <button type="submit" disabled={!isVarianceZero || targetCib === 0 || isSaving}
                       className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all">
                       <Save size={18} /> {isSaving ? 'Saving...' : (editingAdditionalId ? 'Update Additional' : 'Post Additional')}
