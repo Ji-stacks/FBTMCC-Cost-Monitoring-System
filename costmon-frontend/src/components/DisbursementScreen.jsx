@@ -262,10 +262,14 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     allLines.forEach(line => {
       const amt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
       totalDebit += amt;
-      if (line.category === 'Labor /SUBCONTRACTOR') ewtPayable += (amt * 0.02);
+      const cat = line.category ? line.category.toUpperCase() : '';
+      if (cat === 'LABOR /SUBCONTRACTOR' || cat === 'LABOR/PAYROLL') {
+        // Assume inputted amount is NET. Calculate the added EWT to reach Gross.
+        ewtPayable += (amt / 0.98) - amt;
+      }
     });
 
-    const cib_coh = totalDebit - ewtPayable;
+    const cib_coh = totalDebit + ewtPayable;
     return { totalDebit, ewtPayable, cib_coh };
   }, [constructionLines, miscLines]);
 
@@ -595,9 +599,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       target_cib: String(headerData.target_cib).replace(/,/g, ''),
       expenses: combinedLines,
       attachments: modalAttachments,
-      gross_amount: totals.totalDebit,
+      gross_amount: totals.cib_coh,
       ewt_amount: totals.ewtPayable,
-      net_amount: totals.cib_coh,
+      net_amount: totals.totalDebit,
       created_at: editingId ? disbursements.find(d => d.id === editingId).created_at : new Date().toISOString()
     };
 
@@ -1213,7 +1217,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         ))}
                       </div>
                       <div className="mt-4 pt-3 text-[10px] text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-700 italic">
-                        * If "Labor /SUBCONTRACTOR" is chosen, it will calculate automatically by 2% for the EWT Payable.
+                        * If "Labor /SUBCONTRACTOR" or "LABOR/PAYROLL" is chosen, it will calculate automatically by 2% for the EWT Payable.
                       </div>
                     </div>
 
@@ -1419,12 +1423,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       <h3 className="text-sm font-bold text-slate-300 dark:text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-700 dark:border-slate-800">4. Accounting Summary</h3>
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-slate-300 dark:text-slate-400 text-sm">
-                          <span>Total of Debit (Gross Exp.)</span>
+                          <span>Total of Debit (Net Exp.)</span>
                           <span className="font-mono text-white">₱ {totals.totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
-                        <div className="flex justify-between items-center text-rose-300 dark:text-rose-400 text-sm">
-                          <span>Less: EWT Payable</span>
-                          <span className="font-mono">- ₱ {totals.ewtPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        <div className="flex justify-between items-center text-emerald-400 dark:text-emerald-500 text-sm">
+                          <span>Add: EWT</span>
+                          <span className="font-mono">+ ₱ {totals.ewtPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
                         {headerData.input_tax && (
                           <div className="flex justify-between items-center text-slate-400 dark:text-slate-500 text-xs">
