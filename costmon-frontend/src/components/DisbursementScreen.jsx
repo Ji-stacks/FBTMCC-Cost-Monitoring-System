@@ -770,10 +770,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
             textClass="text-emerald-600 dark:text-emerald-400"
           />
           <HealthCard
-            title="Current Variance"
-            amount={ledgerTotals.diff}
-            colorClass={ledgerTotals.diff === 0 ? "bg-emerald-500" : "bg-rose-500"}
-            textClass={ledgerTotals.diff === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}
+            title="TOTAL EWT"
+            amount={ledgerTotals.ewt}
+            colorClass="bg-indigo-600 dark:bg-indigo-500"
+            textClass="text-indigo-600 dark:text-indigo-400"
           />
         </section>
 
