@@ -4,14 +4,14 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, 
 
 export default function DashboardScreen({ projects = [], disbursements = [] }) {
   const [activeView, setActiveView] = useState('selection');
-  
+
   // State para i-toggle ang Additional Works breakdown columns
   const [showAdditionalWorks, setShowAdditionalWorks] = useState(true);
 
   // Loading states para sa exports
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
-  
+
   // BAGO: Loading states at Ref para sa Office Exports
   const [isExportingOfficePDF, setIsExportingOfficePDF] = useState(false);
   const [isExportingOfficeExcel, setIsExportingOfficeExcel] = useState(false);
@@ -65,14 +65,14 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
       const wb = XLSX.utils.book_new();
       const excelRows = [];
-      
+
       excelRows.push(["FBTMCC - PROJECT MASTER SPREADSHEET"]);
       excelRows.push([dateFilterLabel ? `Filter Period: ${dateFilterLabel}` : "Period: All-Time Records"]);
       excelRows.push([]);
 
       excelRows.push([
-        "Code", "Store Name", "Contract Cost (CC)", 
-        "Additional Works Particulars", "Amount", "Total Additional (TAW)", 
+        "Code", "Store Name", "Contract Cost (CC)",
+        "Additional Works Particulars", "Amount", "Total Additional (TAW)",
         "Total Contract (TCC)", "12% VAT of TCC", "CC without VAT",
         "Overhead 30%", "Overhead 20%", "Overhead 12%",
         "Target DLM @ 30%", "Target DLM @ 20%", "Target DLM @ 12%",
@@ -81,7 +81,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
       projectData.forEach(p => {
         const adds = p.additionalExpensesList || [];
-        
+
         if (adds.length === 0) {
           excelRows.push([
             p.project_code, p.project_name, p.CC,
@@ -120,7 +120,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
       const ws = XLSX.utils.aoa_to_sheet(excelRows);
       XLSX.utils.book_append_sheet(wb, ws, "Projects Master Ledger");
-      
+
       const dateStr = new Date().toISOString().split('T')[0];
       XLSX.writeFile(wb, `PROJECT_MASTER_SPREADSHEET_${dateStr}.xlsx`);
     } catch (error) {
@@ -135,26 +135,26 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
   // ==========================================
   const downloadProjectPDF = async () => {
     if (!projectTableRef.current) return;
-    
+
     try {
       setIsExportingPDF(true);
       const html2canvas = (await import('html2canvas')).default;
       const { jsPDF } = await import('jspdf');
 
       const element = projectTableRef.current;
-      
+
       const canvas = await html2canvas(element, {
-        scale: 2, 
+        scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: document.documentElement.classList.contains('dark') ? '#0a0a0a' : '#ffffff',
         scrollX: 0,
         scrollY: 0,
-        windowWidth: 2900 
+        windowWidth: 2900
       });
 
       const imgData = canvas.toDataURL('image/png');
-      
+
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'px',
@@ -162,12 +162,12 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       });
 
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      
+
       const dateStr = new Date().toISOString().split('T')[0];
       pdf.save(`PROJECT_MASTER_SPREADSHEET_${dateStr}.pdf`);
     } catch (error) {
       console.error("Failed to export PDF:", error);
-    } finally { 
+    } finally {
       setIsExportingPDF(false);
     }
   };
@@ -182,31 +182,31 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
       const wb = XLSX.utils.book_new();
       const excelRows = [];
-      
+
       excelRows.push(["FBTMCC - OFFICE OPERATIONS MASTER LEDGER"]);
       excelRows.push([dateFilterLabel ? `Filter Period: ${dateFilterLabel}` : "Period: All-Time Records"]);
-      excelRows.push([]); 
+      excelRows.push([]);
 
       excelRows.push([
-        "Date", "Code", "Total", "Net Profit", "Contract plus Add'l w/VAT", "Empty", 
-        "Contract w/o Vat", "Contract w/o Vat & Overhead & PM", "Equivalent 30% Overhead, Contingency & PM", 
+        "Date", "Code", "Total", "Net Profit", "Contract plus Add'l w/VAT", "Empty",
+        "Contract w/o Vat", "Contract w/o Vat & Overhead & PM", "Equivalent 30% Overhead, Contingency & PM",
         "Equivalent 10% Retention base on Contract w/ Vat", "Effective Overhead", "Total EOC per Month",
-        "Payroll", "Electrical Office/Payatas", "Water/office/Payatas", "Comunication/Telephone", 
+        "Payroll", "Electrical Office/Payatas", "Water/office/Payatas", "Comunication/Telephone",
         "Retainer", "Office supplies/Outing", "Car Repair & Maintenance", "Car Registration", "Contribution"
       ]);
 
       officeData.forEach(o => {
         excelRows.push([
-          o.project_start || '-', o.project_code, o.total_specific_expenses, o.NET_PROFIT, o.TCC, "-", 
+          o.project_start || '-', o.project_code, o.total_specific_expenses, o.NET_PROFIT, o.TCC, "-",
           o.CC_WITHOUT_VAT, o.CC_WO_VAT_OH_PM, o.OH_30, o.RETENTION_10, o.EFFECTIVE_OVERHEAD, "-",
-          o.exp_payroll, o.exp_electrical, o.exp_water, o.exp_comms, o.exp_retainer, 
+          o.exp_payroll, o.exp_electrical, o.exp_water, o.exp_comms, o.exp_retainer,
           o.exp_supplies, o.exp_car_repair, o.exp_car_reg, o.exp_contribution
         ]);
       });
 
       const ws = XLSX.utils.aoa_to_sheet(excelRows);
       XLSX.utils.book_append_sheet(wb, ws, "Office Master Ledger");
-      
+
       const dateStr = new Date().toISOString().split('T')[0];
       XLSX.writeFile(wb, `OFFICE_MASTER_LEDGER_${dateStr}.xlsx`);
     } catch (error) {
@@ -221,26 +221,26 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
   // ==========================================
   const downloadOfficePDF = async () => {
     if (!officeTableRef.current) return;
-    
+
     try {
       setIsExportingOfficePDF(true);
       const html2canvas = (await import('html2canvas')).default;
       const { jsPDF } = await import('jspdf');
 
       const element = officeTableRef.current;
-      
+
       const canvas = await html2canvas(element, {
-        scale: 2, 
+        scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: document.documentElement.classList.contains('dark') ? '#0a0a0a' : '#ffffff',
         scrollX: 0,
         scrollY: 0,
-        windowWidth: 2900 
+        windowWidth: 2900
       });
 
       const imgData = canvas.toDataURL('image/png');
-      
+
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'px',
@@ -248,12 +248,12 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       });
 
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      
+
       const dateStr = new Date().toISOString().split('T')[0];
       pdf.save(`OFFICE_MASTER_LEDGER_${dateStr}.pdf`);
     } catch (error) {
       console.error("Failed to export PDF:", error);
-    } finally { 
+    } finally {
       setIsExportingOfficePDF(false);
     }
   };
@@ -274,12 +274,12 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
   // ==========================================
   const filteredDisbursements = useMemo(() => {
     if (!startDate && !endDate) return disbursements;
-    
+
     return disbursements.filter(d => {
-      if (!d.date) return false; 
+      if (!d.date) return false;
       const dDate = new Date(d.date);
       dDate.setHours(0, 0, 0, 0);
-      
+
       if (startDate) {
         const sDate = new Date(startDate);
         sDate.setHours(0, 0, 0, 0);
@@ -305,7 +305,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
     let totalExp = 0;
 
     projects.forEach(p => {
-      const projExpenses = filteredDisbursements.filter(d => 
+      const projExpenses = filteredDisbursements.filter(d =>
         d.project_code && d.project_code.toUpperCase() === p.project_code.toUpperCase()
       );
 
@@ -320,7 +320,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
       const additionalExpensesList = [];
       let TAW = 0;
-      
+
       projExpenses.filter(d => d.costing_type === 'additional').forEach(d => {
         (d.expenses || []).forEach(exp => {
           const amt = parseFloat(exp.amount) || 0;
@@ -337,11 +337,11 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
         .reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => s + (parseFloat(exp.amount) || 0), 0), 0);
 
       const totalExpense = TAW + ADLM;
-      totalExp += totalExpense; 
+      totalExp += totalExpense;
 
       const CC = parseFloat(p.contract_cost) || 0;
       const TCC = CC + TAW;
-      const VAT_12 = TCC * (1 - (1 / 1.12)); 
+      const VAT_12 = TCC * (1 - (1 / 1.12));
       const CC_WITHOUT_VAT = TCC - VAT_12;
 
       const OH_30 = TCC * 0.30;
@@ -357,8 +357,8 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       const SAVING_12 = TARGET_DLM_12 - ADLM;
 
       const RETENTION_10 = TCC * 0.10;
-      const CC_WO_VAT_OH_PM = CC_WITHOUT_VAT - OH_30; 
-      const EFFECTIVE_OVERHEAD = OH_30; 
+      const CC_WO_VAT_OH_PM = CC_WITHOUT_VAT - OH_30;
+      const EFFECTIVE_OVERHEAD = OH_30;
 
       const exp_payroll = getCategoryTotal('payroll') + getCategoryTotal('labor');
       const exp_electrical = getCategoryTotal('electrical');
@@ -371,7 +371,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       const exp_contribution = getCategoryTotal('contribution');
 
       const total_specific_expenses = exp_payroll + exp_electrical + exp_water + exp_comms + exp_retainer + exp_supplies + exp_car_repair + exp_car_reg + exp_contribution;
-      const NET_PROFIT = TCC - total_specific_expenses; 
+      const NET_PROFIT = TCC - total_specific_expenses;
 
       const computedData = {
         ...p,
@@ -379,10 +379,10 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
         OH_30, OH_20, OH_12,
         TARGET_DLM_30, TARGET_DLM_20, TARGET_DLM_12,
         ADLM, SAVING_30, SAVING_20, SAVING_12,
-        
+
         NET_PROFIT, RETENTION_10, CC_WO_VAT_OH_PM, EFFECTIVE_OVERHEAD,
         total_specific_expenses, exp_payroll,
-        exp_electrical, exp_water, exp_comms, exp_retainer, 
+        exp_electrical, exp_water, exp_comms, exp_retainer,
         exp_supplies, exp_car_repair, exp_car_reg, exp_contribution
       };
 
@@ -396,10 +396,10 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       }
     });
 
-    return { 
-      officeData: office, 
-      projectData: projs, 
-      officeTotalBudget: oBudget, 
+    return {
+      officeData: office,
+      projectData: projs,
+      officeTotalBudget: oBudget,
       projectTotalBudget: pBudget,
       totalCompanyExpenses: totalExp
     };
@@ -414,7 +414,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] dark:bg-slate-950 overflow-hidden transition-colors duration-300">
-      
+
       {/* HEADER WITH DATE FILTER */}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-8 py-6 flex flex-col xl:flex-row xl:items-center justify-between shrink-0 shadow-sm z-10 gap-4">
         <div>
@@ -435,9 +435,9 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
           <div className="flex items-center gap-3 px-2">
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Date From</span>
-              <input 
-                type="date" 
-                value={startDate} 
+              <input
+                type="date"
+                value={startDate}
                 max={endDate}
                 onChange={e => setStartDate(e.target.value)}
                 className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer dark:[color-scheme:dark]"
@@ -446,9 +446,9 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
             <span className="text-slate-300 dark:text-slate-600 font-black mt-2">-</span>
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Date To</span>
-              <input 
-                type="date" 
-                value={endDate} 
+              <input
+                type="date"
+                value={endDate}
                 min={startDate}
                 onChange={e => setEndDate(e.target.value)}
                 className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer dark:[color-scheme:dark]"
@@ -456,7 +456,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
             </div>
           </div>
           {(startDate || endDate) && (
-            <button 
+            <button
               onClick={() => { setStartDate(''); setEndDate(''); }}
               className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors ml-1"
               title="Clear Filter"
@@ -468,18 +468,18 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-        
+
         {/* ==============================================
             VIEW 1: SELECTION MENU WITH SUMMARY CARDS
         ============================================== */}
         {activeView === 'selection' && (
           <div className="max-w-6xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-            
+
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-black text-slate-800 dark:text-white">At a Glance</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Quick summary of FBTMCC's overall financial data 
+                  Quick summary of FBTMCC's overall financial data
                   {startDate || endDate ? <span className="font-bold text-indigo-600 dark:text-indigo-400 ml-1">(Filtered)</span> : ''}.
                 </p>
               </div>
@@ -503,7 +503,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
             <div className="text-center mb-8">
               <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Detailed Ledgers</h2>
-              <p className="text-slate-500 dark:text-slate-400 mt-2">Pumili sa ibaba kung anong master spreadsheet ang gusto mong silipin.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">Choose your master spreadsheet.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl mx-auto">
@@ -681,7 +681,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                 <div className="flex items-center gap-4 flex-wrap">
                   <TrendingUp size={24} />
                   <h2 className="text-xl font-black uppercase tracking-widest leading-tight">Project Master Spreadsheet</h2>
-                  
+
                   {dateFilterLabel && (
                     <div className="hidden sm:flex items-center px-3 py-1 bg-white/10 rounded-full border border-white/20 shadow-sm gap-2">
                       <Calendar size={12} className="opacity-80" />
@@ -689,13 +689,13 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                     </div>
                   )}
                 </div>
-                
+
                 {/* CONTROLS AREA */}
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                  
+
                   {/* BUTTON 1: EXCEL EXPORT */}
                   <div className="relative group flex items-center justify-center">
-                    <button 
+                    <button
                       onClick={downloadProjectExcel}
                       disabled={isExportingExcel}
                       className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl font-bold transition-all shadow-sm cursor-pointer"
@@ -709,7 +709,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
                   {/* BUTTON 2: PDF EXPORT */}
                   <div className="relative group flex items-center justify-center">
-                    <button 
+                    <button
                       onClick={downloadProjectPDF}
                       disabled={isExportingPDF}
                       className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl font-bold transition-all shadow-sm cursor-pointer"
@@ -739,14 +739,14 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                   </div>
                 </div>
               </div>
-              
+
               {dateFilterLabel && (
                 <div className="sm:hidden px-8 py-2 bg-indigo-700 text-white flex items-center gap-2 border-b border-indigo-500/50">
                   <Calendar size={12} className="opacity-80" />
                   <span className="text-[10px] font-bold uppercase tracking-widest">{dateFilterLabel}</span>
                 </div>
               )}
-              
+
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[2800px]" style={{ zoom: zoomLevel }}>
                   <thead>
@@ -754,7 +754,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                       <th className="p-4 sticky left-0 z-20 bg-slate-100 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700">Code</th>
                       <th className="p-4 sticky left-[80px] z-20 bg-slate-100 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 w-[200px]">Store Name</th>
                       <th className="p-4 text-center bg-blue-50 dark:bg-blue-900/10">Contract cost (CC)</th>
-                      
+
                       {showAdditionalWorks && (
                         <>
                           <th className="p-4 text-center border-r border-slate-200 dark:border-slate-700 w-[200px] relative">
@@ -771,7 +771,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                           <th className="p-4 text-center border-r border-slate-200 dark:border-slate-700 w-[120px]">Amount</th>
                         </>
                       )}
-                      
+
                       <th className="p-4 text-center bg-purple-50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-400 relative">
                         {!showAdditionalWorks && (
                           <div className="absolute top-2 left-2 flex items-center justify-center group z-30">
@@ -789,17 +789,17 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                       <th className="p-4 text-center bg-indigo-50 dark:bg-indigo-900/10 text-indigo-700 dark:text-indigo-400">Total Contract (TCC)</th>
                       <th className="p-4 text-center text-rose-600">12% VAT of TCC</th>
                       <th className="p-4 text-center font-bold border-r border-slate-200 dark:border-slate-700">CC without VAT</th>
-                      
+
                       <th className="p-4 text-center bg-slate-200/50 dark:bg-slate-800">Overhead 30%</th>
                       <th className="p-4 text-center bg-slate-200/50 dark:bg-slate-800">Overhead 20%</th>
                       <th className="p-4 text-center bg-slate-200/50 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-700">Overhead 12%</th>
-                      
+
                       <th className="p-4 text-center bg-emerald-50 dark:bg-emerald-900/10">Target DLM @ 30%</th>
                       <th className="p-4 text-center bg-emerald-50 dark:bg-emerald-900/10">Target DLM @ 20%</th>
                       <th className="p-4 text-center bg-emerald-50 dark:bg-emerald-900/10 border-r border-slate-300 dark:border-slate-700">Target DLM @ 12%</th>
-                      
+
                       <th className="p-4 text-center bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 font-black">Actual ADLM</th>
-                      
+
                       <th className="p-4 text-center bg-blue-50 dark:bg-blue-900/10">Saving @ 30%</th>
                       <th className="p-4 text-center bg-blue-50 dark:bg-blue-900/10">Saving @ 20%</th>
                       <th className="p-4 text-center bg-blue-50 dark:bg-blue-900/10">Saving @ 12%</th>
@@ -809,11 +809,11 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-[12px]">
                     {projectData.map(p => {
                       const adds = p.additionalExpensesList || [];
-                      
-                      const rowsToRender = showAdditionalWorks 
-                        ? (adds.length > 0 ? [...adds] : [null]) 
-                        : [null]; 
-                        
+
+                      const rowsToRender = showAdditionalWorks
+                        ? (adds.length > 0 ? [...adds] : [null])
+                        : [null];
+
                       if (showAdditionalWorks && adds.length > 1) {
                         rowsToRender.push({ isTotalRow: true, amount: p.TAW });
                       }
@@ -836,7 +836,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                                 <td className="p-4 text-right font-mono bg-blue-50/30 dark:bg-blue-900/5">
                                   {isFirst ? formatMoney(p.CC) : ''}
                                 </td>
-                                
+
                                 {showAdditionalWorks && (
                                   <>
                                     <td className={`p-4 pl-8 text-[10px] text-left border-r dark:border-slate-800 ${isTotal ? 'font-black text-[12px] text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400 tracking-wide'}`}>
@@ -852,17 +852,17 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                                 <td className="p-4 text-right font-mono font-black text-indigo-600 dark:text-indigo-400">{isFirst ? formatMoney(p.TCC) : ''}</td>
                                 <td className="p-4 text-right font-mono text-rose-500">{isFirst ? formatMoney(p.VAT_12) : ''}</td>
                                 <td className="p-4 text-right font-mono font-bold border-r dark:border-slate-800">{isFirst ? formatMoney(p.CC_WITHOUT_VAT) : ''}</td>
-                                
+
                                 <td className="p-4 text-right font-mono text-slate-500">{isFirst ? formatMoney(p.OH_30) : ''}</td>
                                 <td className="p-4 text-right font-mono text-slate-500">{isFirst ? formatMoney(p.OH_20) : ''}</td>
                                 <td className="p-4 text-right font-mono text-slate-500 border-r border-slate-300 dark:border-slate-700">{isFirst ? formatMoney(p.OH_12) : ''}</td>
-                                
+
                                 <td className="p-4 text-right font-mono text-emerald-600 dark:text-emerald-400">{isFirst ? formatMoney(p.TARGET_DLM_30) : ''}</td>
                                 <td className="p-4 text-right font-mono text-emerald-600 dark:text-emerald-400">{isFirst ? formatMoney(p.TARGET_DLM_20) : ''}</td>
                                 <td className="p-4 text-right font-mono text-emerald-600 dark:text-emerald-400 border-r dark:border-slate-300 dark:border-slate-700">{isFirst ? formatMoney(p.TARGET_DLM_12) : ''}</td>
-                                
+
                                 <td className="p-4 text-right font-mono font-black text-amber-600 bg-amber-50/50 dark:bg-amber-900/10">{isFirst ? formatMoney(p.ADLM) : ''}</td>
-                                
+
                                 <td className={`p-4 text-right font-mono font-black ${p.SAVING_30 >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
                                   {isFirst ? formatMoney(p.SAVING_30) : ''}
                                 </td>
@@ -909,13 +909,13 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                     )}
                   </div>
                 </div>
-                
+
                 {/* CONTROLS (OFFICE) */}
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                  
+
                   {/* EXCEL EXPORT BUTTON (OFFICE) */}
                   <div className="relative group flex items-center justify-center">
-                    <button 
+                    <button
                       onClick={downloadOfficeExcel}
                       disabled={isExportingOfficeExcel}
                       className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl font-bold transition-all shadow-sm cursor-pointer"
@@ -929,7 +929,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
 
                   {/* PDF EXPORT BUTTON (OFFICE) */}
                   <div className="relative group flex items-center justify-center">
-                    <button 
+                    <button
                       onClick={downloadOfficePDF}
                       disabled={isExportingOfficePDF}
                       className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl font-bold transition-all shadow-sm cursor-pointer"
@@ -965,7 +965,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                   <span className="text-[10px] font-bold uppercase tracking-widest">{dateFilterLabel}</span>
                 </div>
               )}
-              
+
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[2800px]" style={{ zoom: zoomLevel }}>
                   <thead>
@@ -982,7 +982,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                       <th className="p-4 text-center bg-rose-50 dark:bg-rose-900/10 text-rose-600">Equivalent 10% Retention base on Contract w/ Vat</th>
                       <th className="p-4 text-center font-bold border-r border-slate-300 dark:border-slate-700">Effective Overhead</th>
                       <th className="p-4 text-center">Total EOC per Month</th>
-                      
+
                       {/* SPECIFIC EXPENSES */}
                       <th className="p-4 text-center bg-slate-50 dark:bg-slate-800">Payroll</th>
                       <th className="p-4 text-center bg-slate-50 dark:bg-slate-800">Electrical Office/Payatas</th>
@@ -998,7 +998,7 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-[12px]">
                     {officeData.length === 0 ? (
                       <tr>
-                        <td colSpan="21" className="p-8 text-center text-slate-400 dark:text-slate-500 italic">Walang naka-record na admin/office department para sa napiling petsa.</td>
+                        <td colSpan="21" className="p-8 text-center text-slate-400 dark:text-slate-500 italic">No records for this date range.</td>
                       </tr>
                     ) : officeData.map(o => (
                       <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
@@ -1013,8 +1013,8 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
                         <td className="p-4 text-right font-mono text-purple-600 dark:text-purple-400 bg-purple-50/30 dark:bg-purple-900/5">{formatMoney(o.OH_30)}</td>
                         <td className="p-4 text-right font-mono text-rose-500 bg-rose-50/30 dark:bg-rose-900/5">{formatMoney(o.RETENTION_10)}</td>
                         <td className="p-4 text-right font-mono font-bold border-r dark:border-slate-800">{formatMoney(o.EFFECTIVE_OVERHEAD)}</td>
-                        <td className="p-4 text-right font-mono text-slate-500">-</td> 
-                        
+                        <td className="p-4 text-right font-mono text-slate-500">-</td>
+
                         <td className="p-4 text-right font-mono text-slate-500">{formatMoney(o.exp_payroll)}</td>
                         <td className="p-4 text-right font-mono text-slate-500">{formatMoney(o.exp_electrical)}</td>
                         <td className="p-4 text-right font-mono text-slate-500">{formatMoney(o.exp_water)}</td>
