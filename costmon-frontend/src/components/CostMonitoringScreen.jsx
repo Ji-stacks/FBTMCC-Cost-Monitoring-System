@@ -97,12 +97,12 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
 
   const [editingValues, setEditingValues] = useState(() => {
     const p = projects.find(item => item.id === (initialProjectId || projects[0]?.id || ''));
-    if (p) return { 
-      contract_cost: p.contract_cost !== undefined && p.contract_cost !== null ? p.contract_cost : '0', 
-      profit_percentage: p.profit_percentage !== undefined && p.profit_percentage !== null ? p.profit_percentage : 0.15, 
-      project_area: p.project_area !== null && p.project_area !== undefined ? String(p.project_area) : '', 
-      project_start: p.project_start || '', 
-      days_end: p.days_end || '' 
+    if (p) return {
+      contract_cost: p.contract_cost !== undefined && p.contract_cost !== null ? p.contract_cost : '0',
+      profit_percentage: p.profit_percentage !== undefined && p.profit_percentage !== null ? p.profit_percentage : 0.15,
+      project_area: p.project_area !== null && p.project_area !== undefined ? String(p.project_area) : '',
+      project_start: p.project_start || '',
+      days_end: p.days_end || ''
     };
     return { profit_percentage: 0.15 };
   });
@@ -111,12 +111,12 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
   if (project?.id !== prevProject?.id) {
     setPrevProject(project);
     if (project) {
-      setEditingValues({ 
-        contract_cost: project.contract_cost !== undefined && project.contract_cost !== null ? project.contract_cost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0', 
-        profit_percentage: project.profit_percentage !== undefined && project.profit_percentage !== null ? project.profit_percentage : 0.15, 
-        project_area: project.project_area !== null && project.project_area !== undefined ? String(project.project_area) : '', 
-        project_start: project.project_start || '', 
-        days_end: project.days_end || '' 
+      setEditingValues({
+        contract_cost: project.contract_cost !== undefined && project.contract_cost !== null ? project.contract_cost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0',
+        profit_percentage: project.profit_percentage !== undefined && project.profit_percentage !== null ? project.profit_percentage : 0.15,
+        project_area: project.project_area !== null && project.project_area !== undefined ? String(project.project_area) : '',
+        project_start: project.project_start || '',
+        days_end: project.days_end || ''
       });
       setPulsingCategory(null);
     }
@@ -125,7 +125,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
   // CHECKER KUNG MAY BAGO SA PROJECT DETAILS
   const isProjectDirty = useMemo(() => {
     if (!project) return false;
-    
+
     const currentCost = parseFloat(String(editingValues.contract_cost || 0).replace(/,/g, ''));
     const projectCost = parseFloat(String(project.contract_cost || 0).replace(/,/g, ''));
     if (Math.abs(currentCost - projectCost) > 0.01) return true;
@@ -380,7 +380,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 transition-colors duration-300">
         <AlertCircle size={48} className="mb-4 opacity-20" />
-        <p className="text-xl font-medium">Walang nahanap na Project</p>
+        <p className="text-xl font-medium">Can't find any projects</p>
       </div>
     );
   }
@@ -751,7 +751,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
           <div className="overflow-x-auto pb-8 custom-scrollbar">
             <div className="bg-slate-800 dark:bg-slate-900 text-center py-4 rounded-t-xl font-black text-white uppercase tracking-[0.2em] text-sm shadow-md min-w-[1400px] border-2 border-b-0 border-slate-800 dark:border-slate-700">CONSTRUCTION COST BREAKDOWN</div>
             {filteredDisplayedCategories.length === 0 ? (
-              <div className="border-2 border-t-0 border-slate-800 dark:border-slate-700 rounded-b-xl bg-white dark:bg-slate-800 min-w-[1400px] p-20 flex flex-col items-center opacity-50 text-slate-500 shadow-sm"><Calendar size={48} className="mb-4" strokeWidth={1.5} /><p className="text-xl font-bold">Walang Resulta</p><p className="text-sm font-medium mt-1">Wala sa listahan ang napiling kategorya o walang nai-encode na data para dito.</p></div>
+              <div className="border-2 border-t-0 border-slate-800 dark:border-slate-700 rounded-b-xl bg-white dark:bg-slate-800 min-w-[1400px] p-20 flex flex-col items-center opacity-50 text-slate-500 shadow-sm"><Calendar size={48} className="mb-4" strokeWidth={1.5} /><p className="text-xl font-bold">No Result.</p><p className="text-sm font-medium mt-1">Selected category not found, or no data is available..</p></div>
             ) : (
               <div className="flex flex-col gap-8 min-w-[1400px] bg-white dark:bg-slate-800 border-2 border-t-0 border-slate-800 dark:border-slate-700 rounded-b-xl p-6 shadow-sm relative">
                 {filteredDisplayedCategories.map((category) => {
