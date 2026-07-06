@@ -344,9 +344,9 @@ export default function DashboardScreen({ projects = [], disbursements = [] }) {
       const VAT_12 = TCC * (1 - (1 / 1.12));
       const CC_WITHOUT_VAT = TCC - VAT_12;
 
-      const OH_30 = TCC * 0.30;
-      const OH_20 = TCC * 0.20;
-      const OH_12 = TCC * 0.12;
+      const OH_30 = (TCC / 1.3) * 0.30;
+      const OH_20 = (TCC / 1.2) * 0.20;
+      const OH_12 = (TCC / 1.12) * 0.12;
 
       const TARGET_DLM_30 = CC_WITHOUT_VAT - OH_30;
       const TARGET_DLM_20 = CC_WITHOUT_VAT - OH_20;
