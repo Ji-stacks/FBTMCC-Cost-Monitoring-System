@@ -17,6 +17,7 @@ export default function GlobalSearchModal({ isOpen, onClose, disbursements, proj
 
   const filteredDisbursements = disbursements.filter(d => 
     d.cv_no?.toLowerCase().includes(query.toLowerCase()) ||
+    d.or_inv_no?.toLowerCase().includes(query.toLowerCase()) ||
     d.payee?.toLowerCase().includes(query.toLowerCase()) ||
     d.particulars?.toLowerCase().includes(query.toLowerCase())
   ).slice(0, 5);
@@ -40,7 +41,7 @@ export default function GlobalSearchModal({ isOpen, onClose, disbursements, proj
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search CV No, Payee, Project Name..."
+            placeholder="Search CV No, OR/INV No, Payee, Project Name..."
             className="flex-1 text-xl font-bold bg-transparent outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600 text-slate-800 dark:text-slate-100"
             value={query}
             onChange={e => setQuery(e.target.value)}
@@ -50,7 +51,7 @@ export default function GlobalSearchModal({ isOpen, onClose, disbursements, proj
               } else if (e.key === 'Enter') {
                 e.preventDefault();
                 if (filteredDisbursements.length > 0) {
-                  onNavigateToDisbursement(filteredDisbursements[0].cv_no);
+                  onNavigateToDisbursement(filteredDisbursements[0].cv_no || filteredDisbursements[0].or_inv_no);
                   onClose();
                 } 
                 else if (filteredProjects.length > 0) {
@@ -87,7 +88,7 @@ export default function GlobalSearchModal({ isOpen, onClose, disbursements, proj
                     {filteredDisbursements.map(d => (
                       <button
                         key={d.id}
-                        onClick={() => { onNavigateToDisbursement(d.cv_no); onClose(); }}
+                        onClick={() => { onNavigateToDisbursement(d.cv_no || d.or_inv_no); onClose(); }}
                         className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-2xl transition-all group flex items-center justify-between"
                       >
                         <div className="flex items-center gap-4">
@@ -95,7 +96,7 @@ export default function GlobalSearchModal({ isOpen, onClose, disbursements, proj
                             CV
                           </div>
                           <div>
-                            <div className="font-bold text-slate-800 dark:text-slate-200">{d.cv_no}</div>
+                            <div className="font-bold text-slate-800 dark:text-slate-200">{d.cv_no || d.or_inv_no}</div>
                             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate max-w-[300px]">{d.payee} — {d.particulars}</div>
                           </div>
                         </div>
