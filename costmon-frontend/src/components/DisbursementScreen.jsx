@@ -139,7 +139,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase().trim();
-      result = result.filter(d => d.cv_no && d.cv_no.toLowerCase().includes(query));
+      result = result.filter(d => 
+        (d.cv_no && d.cv_no.toLowerCase().includes(query)) || 
+        (d.or_inv_no && d.or_inv_no.toLowerCase().includes(query))
+      );
     }
 
     // Sort by project_code: Z-A for prefix, ascending for number
@@ -253,7 +256,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   }, [categories, filteredDisbursements]);
 
   const totalVisibleColumns = useMemo(() => {
-    return 7 + (isAcctsPayVisible ? 1 : 0) + (isEwtVisible ? 1 : 0) + visibleCategories.length + (canEdit ? 1 : 0);
+    return 8 + (isAcctsPayVisible ? 1 : 0) + (isEwtVisible ? 1 : 0) + visibleCategories.length + (canEdit ? 1 : 0);
   }, [isAcctsPayVisible, isEwtVisible, visibleCategories, canEdit]);
 
   const ledgerTotals = useMemo(() => {
@@ -350,6 +353,22 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       (d) => d.id !== editingId && d.cv_no && d.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase()
     );
   }, [headerData.cv_no, disbursements, editingId]);
+
+  const isDuplicateOR = useMemo(() => {
+    if (!headerData.or_inv_no) return false;
+    
+    // Bypass validation if in edit mode and the OR/INV hasn't changed from its original value
+    if (editingId) {
+      const originalRecord = disbursements.find(d => d.id === editingId);
+      if (originalRecord && originalRecord.or_inv_no && originalRecord.or_inv_no.trim().toLowerCase() === headerData.or_inv_no.trim().toLowerCase()) {
+        return false;
+      }
+    }
+
+    return disbursements.some(
+      (d) => d.id !== editingId && d.or_inv_no && d.or_inv_no.trim().toLowerCase() === headerData.or_inv_no.trim().toLowerCase()
+    );
+  }, [headerData.or_inv_no, disbursements, editingId]);
 
   // ==========================================
   // 4. HANDLERS
@@ -638,8 +657,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     setErrorMessage('');
 
     if (!headerData.project_code || !canEdit || totals.totalDebit === 0) return;
-    if (!headerData.cv_no) { setErrorMessage("Kailangan ilagay ang CV#."); return; }
+    if (!headerData.cv_no && !headerData.or_inv_no) { setErrorMessage("Kailangan ilagay ang CV# o OR/INV#."); return; }
     if (isDuplicateCV) { setErrorMessage("May kaparehas na CV#! Paki-palitan bago i-save."); return; }
+    if (isDuplicateOR) { setErrorMessage("May kaparehas na OR/INV#! Paki-palitan bago i-save."); return; }
     if (!isVarianceZero) { setErrorMessage("Hindi pwedeng i-save! Paki-check ang Variance. Kailangang pantay ang Target CIB sa Computed CIB."); return; }
 
     const combinedLines = [...constructionLines, ...miscLines].filter(
@@ -815,12 +835,16 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         event.preventDefault();
 
         const originalRecord = editingId ? disbursements.find(d => d.id === editingId) : null;
-        const isSameAsOriginal = originalRecord && originalRecord.cv_no && originalRecord.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase();
-        const isDup = !isSameAsOriginal && disbursements.some((d) => d.id !== editingId && d.cv_no && d.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase());
+        const isSameAsOriginalCV = originalRecord && originalRecord.cv_no && originalRecord.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase();
+        const isDupCV = !isSameAsOriginalCV && headerData.cv_no && disbursements.some((d) => d.id !== editingId && d.cv_no && d.cv_no.trim().toLowerCase() === headerData.cv_no.trim().toLowerCase());
+        
+        const isSameAsOriginalOR = originalRecord && originalRecord.or_inv_no && originalRecord.or_inv_no.trim().toLowerCase() === headerData.or_inv_no.trim().toLowerCase();
+        const isDupOR = !isSameAsOriginalOR && headerData.or_inv_no && disbursements.some((d) => d.id !== editingId && d.or_inv_no && d.or_inv_no.trim().toLowerCase() === headerData.or_inv_no.trim().toLowerCase());
+
         const tCib = parseFloat(headerData.target_cib) || 0;
         const isVarZero = Math.abs(tCib - totals.cib_coh) < 0.01;
 
-        if (!isDup && isVarZero && tCib > 0 && !isSaving && canEdit && headerData.project_code && headerData.cv_no) {
+        if (!isDupCV && !isDupOR && isVarZero && tCib > 0 && !isSaving && canEdit && headerData.project_code && (headerData.cv_no || headerData.or_inv_no)) {
           const fakeEvent = { preventDefault: () => { } };
           handleSubmit(fakeEvent);
         }
@@ -962,7 +986,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
                 <input
                   type="text"
-                  placeholder="Search CV No..."
+                  placeholder="Search CV or Invoice No..."
                   className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-slate-800 dark:text-white transition-all"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -1117,6 +1141,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 sticky left-0 z-10 bg-slate-100 dark:bg-slate-700 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569]">Date</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600">Payee</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-center">CV No.</th>
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-center">OR / INV NO.</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-center">Project</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-right">Debit (Gross)</th>
                   <th className="px-6 py-5 text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-right bg-emerald-100/50 dark:bg-emerald-900/30">Credit (CIB)</th>
@@ -1155,7 +1180,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                   >
                     <td className="px-6 py-4 font-black text-slate-600 dark:text-slate-300 sticky left-0 z-10 bg-white dark:bg-slate-900 group-even:bg-slate-50 dark:group-even:bg-slate-800 group-hover:bg-blue-100/50 dark:group-hover:bg-blue-900/30 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">{d.date}</td>
                     <td className="px-6 py-4 font-black text-slate-800 dark:text-slate-200 border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.payee}</td>
-                    <td className="px-6 py-4 font-black text-blue-700 dark:text-blue-400 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">#{d.cv_no}</td>
+                    <td className="px-6 py-4 font-black text-blue-700 dark:text-blue-400 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.cv_no ? `#${d.cv_no}` : '-'}</td>
+                    <td className="px-6 py-4 font-black text-indigo-700 dark:text-indigo-400 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.or_inv_no ? `#${d.or_inv_no}` : '-'}</td>
                     <td className="px-6 py-4 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">
                       <div className="flex flex-col items-center gap-1">
                         {(Array.isArray(d.project_code) ? d.project_code : [d.project_code]).map((pc, i) => (
@@ -1198,7 +1224,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
               {groupedDisbursements.length > 0 && (
                 <tfoot className="bg-slate-100 dark:bg-slate-800 font-black text-slate-800 dark:text-slate-200 border-t-4 border-slate-400 dark:border-slate-600 transition-colors duration-300">
                   <tr>
-                    <td colSpan="4" className="px-6 py-6 text-right text-xs tracking-widest text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-slate-100 dark:bg-slate-800 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">TOTAL SUMMARY:</td>
+                    <td colSpan="5" className="px-6 py-6 text-right text-xs tracking-widest text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-slate-100 dark:bg-slate-800 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">TOTAL SUMMARY:</td>
                     <td className="px-6 py-6 text-right font-mono text-blue-800 dark:text-blue-400 border-r border-slate-400 dark:border-slate-600 text-lg">₱{ledgerTotals.dr.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td className="px-6 py-6 text-right font-mono text-emerald-800 dark:text-emerald-400 border-r border-slate-400 dark:border-slate-600 text-lg">₱{ledgerTotals.cib.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     {isAcctsPayVisible && (
@@ -1313,7 +1339,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         value={headerData.date} onChange={handleHeaderChange} required />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">CV # <span className="text-red-500">*</span></label>
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">CV # <span className="text-blue-500 font-bold">* (At least one)</span></label>
                       <input
                         type="text"
                         name="cv_no"
@@ -1329,7 +1355,6 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                           const onlyNums = e.target.value.replace(/[^0-9-]/g, '');
                           handleHeaderChange({ target: { name: 'cv_no', value: onlyNums } });
                         }}
-                        required
                       />
                       {isDuplicateCV && (
                         <p className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1 animate-in slide-in-from-top-1">
@@ -1349,9 +1374,18 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         value={headerData.tin} onChange={handleHeaderChange} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">OR / INV #</label>
-                      <input type="text" name="or_inv_no" placeholder="Receipt No." className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">OR / INV # <span className="text-blue-500 font-bold">* (At least one)</span></label>
+                      <input type="text" name="or_inv_no" placeholder="Receipt No." 
+                        className={`w-full p-2 rounded-md text-sm outline-none font-bold transition-all duration-200 ${isDuplicateOR
+                          ? 'border-2 border-red-500 dark:border-red-400 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 focus:ring-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
+                          : 'border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400'
+                          }`}
                         value={headerData.or_inv_no} onChange={handleHeaderChange} />
+                      {isDuplicateOR && (
+                        <p className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1 animate-in slide-in-from-top-1">
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> This OR/INV# is already in use!
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
