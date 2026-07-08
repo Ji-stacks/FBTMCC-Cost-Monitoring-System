@@ -73,6 +73,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
   const [constructionLines, setConstructionLines] = useState([{ id: 1, category: '', amount: '' }]);
   const [miscLines, setMiscLines] = useState([{ id: 2, category: '', amount: '' }]);
+  const [isAddStocksChecked, setIsAddStocksChecked] = useState(false);
+  const [stocksAmount, setStocksAmount] = useState('');
+  const [stockDescription, setStockDescription] = useState('');
 
   // ==========================================
   // 2. SEARCH, FILTER & ZOOM LOGIC
@@ -237,7 +240,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
   const isAcctsPayVisible = useMemo(() => {
     return (filteredDisbursements || []).some(d => {
-      const ap = (parseFloat(d.accts_pay) || 0) + (d.project_code && d.project_code.toLowerCase() === 'credit card' ? (parseFloat(d.net_amount) || 0) : 0);
+      const ap = (parseFloat(d.accts_pay) || 0) + ((Array.isArray(d.project_code) ? d.project_code.some(pc => pc?.toLowerCase() === 'credit card') : d.project_code?.toLowerCase() === 'credit card') ? (parseFloat(d.net_amount) || 0) : 0);
       return ap > 0;
     });
   }, [filteredDisbursements]);
@@ -274,7 +277,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       let acctsPay = parseFloat(d.accts_pay) || 0;
 
       // Overwrite: If project is Credit Card, move CIB to Accts Pay
-      if (d.project_code && d.project_code.toLowerCase() === 'credit card') {
+      if (Array.isArray(d.project_code) ? d.project_code.some(pc => pc?.toLowerCase() === 'credit card') : d.project_code?.toLowerCase() === 'credit card') {
         acctsPay += netAmount;
         netAmount = 0;
       }
@@ -331,9 +334,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       }
     });
 
-    const cib_coh = totalDebit + ewtPayable;
-    return { totalDebit, ewtPayable, cib_coh };
-  }, [constructionLines, miscLines]);
+    const parsedStocksAmount = isAddStocksChecked ? (parseFloat(String(stocksAmount).replace(/,/g, '')) || 0) : 0;
+    const cib_coh = totalDebit + ewtPayable + parsedStocksAmount;
+    return { totalDebit, ewtPayable, cib_coh, stocksAmountVal: parsedStocksAmount };
+  }, [constructionLines, miscLines, isAddStocksChecked, stocksAmount]);
 
   const targetCib = parseFloat(String(headerData.target_cib).replace(/,/g, '')) || 0;
   const isVarianceZero = Math.abs(targetCib - totals.cib_coh) < 0.01;
@@ -382,6 +386,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     setErrorMessage('');
     setLineErrors([]);
     setEditingId(null);
+    setIsAddStocksChecked(false);
+    setStocksAmount('');
+    setStockDescription('');
   };
 
   const closeAndResetModal = () => {
@@ -393,7 +400,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     if (!initialFormState) return false;
     const currentLines = [...constructionLines, ...miscLines];
     return JSON.stringify(headerData) !== initialFormState.headerData ||
-      JSON.stringify(currentLines) !== initialFormState.expenseLines;
+      JSON.stringify(currentLines) !== initialFormState.expenseLines ||
+      isAddStocksChecked !== initialFormState.isAddStocksChecked ||
+      stocksAmount !== initialFormState.stocksAmount;
   };
 
   const handleCloseRequest = () => {
@@ -412,7 +421,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     const initM = [{ id: Date.now() + 1, category: '', amount: '' }];
     setInitialFormState({
       headerData: JSON.stringify(initHeader),
-      expenseLines: JSON.stringify([...initC, ...initM])
+      expenseLines: JSON.stringify([...initC, ...initM]),
+      isAddStocksChecked: false,
+      stocksAmount: '',
+      stockDescription: ''
     });
   };
 
@@ -513,7 +525,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     setMiscLines(initM);
     setInitialFormState({
       headerData: JSON.stringify(initHeader),
-      expenseLines: JSON.stringify([...initC, ...initM])
+      expenseLines: JSON.stringify([...initC, ...initM]),
+      isAddStocksChecked: false,
+      stocksAmount: ''
     });
 
     setIsModalOpen(true);
@@ -533,7 +547,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       setMiscLines(initM);
       setInitialFormState({
         headerData: JSON.stringify(initHeader),
-        expenseLines: JSON.stringify([...initC, ...initM])
+        expenseLines: JSON.stringify([...initC, ...initM]),
+        isAddStocksChecked: false,
+        stocksAmount: '',
+        stockDescription: ''
       });
       setIsModalOpen(true);
     }
@@ -599,15 +616,22 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     setMiscLines(mLines);
     setModalAttachments(d.attachments || []);
 
-    if (d.accts_pay || d.input_tax || d.output_tax) {
-      setShowTaxFields(true);
+    if (d.stocks_amount && d.stocks_amount > 0) {
+      setIsAddStocksChecked(true);
+      setStocksAmount(String(d.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
+      setStockDescription(d.stock_description || '');
     } else {
-      setShowTaxFields(false);
+      setIsAddStocksChecked(false);
+      setStocksAmount('');
+      setStockDescription('');
     }
 
     setInitialFormState({
       headerData: JSON.stringify(newHeader),
-      expenseLines: JSON.stringify(expensesWithCommas)
+      expenseLines: JSON.stringify(expensesWithCommas),
+      isAddStocksChecked: d.stocks_amount > 0,
+      stocksAmount: d.stocks_amount > 0 ? String(d.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '',
+      stockDescription: d.stock_description || ''
     });
 
     setErrorMessage('');
@@ -692,6 +716,11 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       return;
     }
 
+    if (isAddStocksChecked && (!stockDescription || stockDescription.trim() === '')) {
+      setErrorMessage("Kailangan maglagay ng Stock Description kapag nag-add ng stocks.");
+      return;
+    }
+
     if (editingId) {
       const newDisbursement = {
         id: editingId,
@@ -703,6 +732,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         gross_amount: totals.cib_coh,
         ewt_amount: totals.ewtPayable,
         net_amount: totals.totalDebit,
+        stocks_amount: isAddStocksChecked ? parseFloat(String(stocksAmount).replace(/,/g, '')) || 0 : 0,
+        stock_description: isAddStocksChecked ? stockDescription.trim() : '',
         created_at: disbursements.find(d => d.id === editingId)?.created_at || new Date().toISOString()
       };
       setPasswordModal({ isOpen: true, action: 'update', payload: newDisbursement });
@@ -734,6 +765,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
           gross_amount: splitAmount(totals.cib_coh),
           ewt_amount: splitAmount(totals.ewtPayable),
           net_amount: splitAmount(totals.totalDebit),
+          stocks_amount: splitAmount(isAddStocksChecked ? stocksAmount : 0),
+          stock_description: isAddStocksChecked ? stockDescription.trim() : '',
           created_at: new Date().toISOString()
         };
       });
@@ -876,6 +909,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
           target_cib: parseFloat(d.target_cib) || 0,
           input_tax: parseFloat(d.input_tax) || 0,
           output_tax: parseFloat(d.output_tax) || 0,
+          stocks_amount: parseFloat(d.stocks_amount) || 0,
+          stock_description: d.stock_description || '',
           expenses: d.expenses ? d.expenses.map(e => ({ ...e, amount: parseFloat(e.amount) || 0 })) : []
         };
       } else {
@@ -890,6 +925,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         group.target_cib += parseFloat(d.target_cib) || 0;
         group.input_tax += parseFloat(d.input_tax) || 0;
         group.output_tax += parseFloat(d.output_tax) || 0;
+        group.stocks_amount += parseFloat(d.stocks_amount) || 0;
 
         if (d.expenses) {
           d.expenses.forEach(exp => {
@@ -1551,6 +1587,73 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       </div>
                     </div>
 
+                    {/* STOCKS OPT-IN CHECKBOX */}
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-colors duration-300">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="add-stocks-checkbox"
+                          className="w-4.5 h-4.5 text-blue-600 border-slate-300 dark:border-slate-600 rounded focus:ring-blue-500 cursor-pointer"
+                          checked={isAddStocksChecked}
+                          onChange={(e) => {
+                            setIsAddStocksChecked(e.target.checked);
+                            if (!e.target.checked) setStocksAmount('');
+                          }}
+                        />
+                        <label htmlFor="add-stocks-checkbox" className="text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                          Add Stocks
+                        </label>
+                      </div>
+                      <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                        Inventory Link
+                      </span>
+                    </div>
+
+                    {/* 4. INPUT STOCKS */}
+                    {isAddStocksChecked && (
+                      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden transition-colors duration-300 animate-in slide-in-from-top-3">
+                        <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">4. INPUT STOCKS <span className="text-red-500">*</span></h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Stock Amount (₱) <span className="text-red-500">*</span></label>
+                            <div className="relative w-full">
+                              <span className="absolute left-3 top-2.5 text-slate-400 dark:text-slate-500 text-sm font-medium">₱</span>
+                              <input
+                                type="text"
+                                placeholder="0.00"
+                                className="w-full pl-7 p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                                value={stocksAmount}
+                                onChange={(e) => {
+                                  let val = e.target.value.replace(/[^0-9.]/g, '');
+                                  const parts = val.split('.');
+                                  if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                                  if (val) {
+                                    const p2 = val.split('.');
+                                    p2[0] = p2[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                    val = p2.join('.');
+                                  }
+                                  setStocksAmount(val);
+                                }}
+                                required
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Stock Description / Item Name <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              placeholder="e.g., Cement, Rebars..."
+                              className="w-full p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors uppercase"
+                              value={stockDescription}
+                              onChange={(e) => setStockDescription(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* ==========================================
                         ATTACHMENTS SECTION
                     ========================================== */}
@@ -1703,7 +1806,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
                   <div className="bg-slate-800 dark:bg-slate-950 text-white p-6 rounded-xl shadow-md flex flex-col justify-between h-fit lg:sticky lg:top-0 transition-colors duration-300 border border-transparent dark:border-slate-800">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-300 dark:text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-700 dark:border-slate-800">4. Accounting Summary</h3>
+                      <h3 className="text-sm font-bold text-slate-300 dark:text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-700 dark:border-slate-800">5. Accounting Summary</h3>
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-slate-300 dark:text-slate-400 text-sm">
                           <span>Total of Debit (Net Exp.)</span>
@@ -1713,6 +1816,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                           <span>Add: EWT</span>
                           <span className="font-mono">+ ₱ {totals.ewtPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
+                        {isAddStocksChecked && (
+                          <div className="flex justify-between items-center text-blue-300 dark:text-blue-400 text-sm">
+                            <span>Add: Stocks Amount</span>
+                            <span className="font-mono text-white">+ ₱ {parseFloat(String(stocksAmount).replace(/,/g, '')) ? parseFloat(String(stocksAmount).replace(/,/g, '')).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}</span>
+                          </div>
+                        )}
                         {headerData.input_tax && (
                           <div className="flex justify-between items-center text-slate-400 dark:text-slate-500 text-xs">
                             <span>Input Tax</span>
