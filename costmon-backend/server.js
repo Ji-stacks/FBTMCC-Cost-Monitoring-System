@@ -121,6 +121,8 @@ db.serialize(() => {
   db.run("ALTER TABLE disbursements ADD COLUMN costing_type TEXT DEFAULT 'normal'", () => { });
   db.run("ALTER TABLE disbursements ADD COLUMN attachments_json TEXT DEFAULT '[]'", () => { });
   db.run("ALTER TABLE disbursements ADD COLUMN bank TEXT", () => { });
+  db.run("ALTER TABLE disbursements ADD COLUMN stocks_amount REAL DEFAULT 0", () => { });
+  db.run("ALTER TABLE disbursements ADD COLUMN stock_description TEXT DEFAULT ''", () => { });
 
   db.run(`CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY, project_code TEXT UNIQUE, project_name TEXT,
@@ -164,6 +166,20 @@ db.serialize(() => {
     entity_id TEXT,
     details TEXT,
     timestamp TEXT
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS stocks (
+    id TEXT PRIMARY KEY,
+    item_name TEXT NOT NULL,
+    sku TEXT UNIQUE,
+    category TEXT,
+    quantity REAL DEFAULT 0,
+    unit TEXT,
+    reorder_level REAL DEFAULT 10,
+    unit_cost REAL DEFAULT 0,
+    project_code TEXT,
+    last_updated TEXT,
+    FOREIGN KEY (project_code) REFERENCES projects(project_code) ON DELETE SET NULL
   )`);
 
   db.get("SELECT count(*) as count FROM users", async (err, row) => {
@@ -380,11 +396,11 @@ app.get('/api/audit-logs', authenticateToken, requireCEO, (req, res) => {
 app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res) => {
   const { username, action, entity_type, startDate, endDate } = req.query;
   let conditions = []; let params = [];
-  if (username)    { conditions.push("username LIKE ?");      params.push('%' + username + '%'); }
-  if (action)      { conditions.push("action = ?");           params.push(action); }
-  if (entity_type) { conditions.push("entity_type = ?");      params.push(entity_type); }
-  if (startDate)   { conditions.push("timestamp >= ?");       params.push(startDate); }
-  if (endDate)     { conditions.push("timestamp <= ?");       params.push(endDate + 'T23:59:59Z'); }
+  if (username) { conditions.push("username LIKE ?"); params.push('%' + username + '%'); }
+  if (action) { conditions.push("action = ?"); params.push(action); }
+  if (entity_type) { conditions.push("entity_type = ?"); params.push(entity_type); }
+  if (startDate) { conditions.push("timestamp >= ?"); params.push(startDate); }
+  if (endDate) { conditions.push("timestamp <= ?"); params.push(endDate + 'T23:59:59Z'); }
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
   try {
@@ -397,7 +413,7 @@ app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res
     });
 
     // ── Build styled workbook ──────────────────────────────────
-    const workbook  = new ExcelJS.Workbook();
+    const workbook = new ExcelJS.Workbook();
     workbook.creator = 'FBTMCC Cost Monitoring System';
     workbook.created = new Date();
 
@@ -409,20 +425,20 @@ app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res
 
     // ── Column definitions with widths ────────────────────────
     sheet.columns = [
-      { header: 'Timestamp',   key: 'timestamp',   width: 24 },
-      { header: 'Username',    key: 'username',     width: 18 },
-      { header: 'Action',      key: 'action',       width: 30 },
-      { header: 'Entity Type', key: 'entity_type',  width: 18 },
-      { header: 'Entity ID',   key: 'entity_id',    width: 22 },
-      { header: 'Details',     key: 'details',      width: 55 },
+      { header: 'Timestamp', key: 'timestamp', width: 24 },
+      { header: 'Username', key: 'username', width: 18 },
+      { header: 'Action', key: 'action', width: 30 },
+      { header: 'Entity Type', key: 'entity_type', width: 18 },
+      { header: 'Entity ID', key: 'entity_id', width: 22 },
+      { header: 'Details', key: 'details', width: 55 },
     ];
 
     // ── Shared border style for every data cell ───────────────
     const thinBorder = {
-      top:    { style: 'thin', color: { argb: 'FFD1D5DB' } }, // gray-300
-      left:   { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      top: { style: 'thin', color: { argb: 'FFD1D5DB' } }, // gray-300
+      left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
       bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-      right:  { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      right: { style: 'thin', color: { argb: 'FFD1D5DB' } },
     };
 
     // ── Style the header row (row 1) ──────────────────────────
@@ -439,10 +455,10 @@ app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res
       };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
       cell.border = {
-        top:    { style: 'medium', color: { argb: 'FF3730A3' } },
-        left:   { style: 'medium', color: { argb: 'FF3730A3' } },
+        top: { style: 'medium', color: { argb: 'FF3730A3' } },
+        left: { style: 'medium', color: { argb: 'FF3730A3' } },
         bottom: { style: 'medium', color: { argb: 'FF3730A3' } },
-        right:  { style: 'medium', color: { argb: 'FF3730A3' } },
+        right: { style: 'medium', color: { argb: 'FF3730A3' } },
       };
     });
     headerRow.height = 28;
@@ -453,18 +469,18 @@ app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res
       // Format timestamp nicely
       const ts = log.timestamp
         ? new Date(log.timestamp).toLocaleString('en-PH', {
-            year: 'numeric', month: 'short', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-          })
+          year: 'numeric', month: 'short', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        })
         : '—';
 
       const dataRow = sheet.addRow({
-        timestamp:   ts,
-        username:    log.username    || '—',
-        action:      log.action      || '—',
+        timestamp: ts,
+        username: log.username || '—',
+        action: log.action || '—',
         entity_type: log.entity_type || '—',
-        entity_id:   log.entity_id   || '—',
-        details:     log.details     || '—',
+        entity_id: log.entity_id || '—',
+        details: log.details || '—',
       });
 
       // Alternating row background: white / very light indigo tint
@@ -473,9 +489,9 @@ app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res
         : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F3FF' } };  // indigo-50
 
       dataRow.eachCell({ includeEmpty: true }, (cell) => {
-        cell.fill      = rowFill;
-        cell.border    = thinBorder;
-        cell.font      = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } }; // slate-800
+        cell.fill = rowFill;
+        cell.border = thinBorder;
+        cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } }; // slate-800
         cell.alignment = { vertical: 'middle', wrapText: true };
       });
 
@@ -484,10 +500,10 @@ app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res
     });
 
     // ── Stream to response ────────────────────────────────────
-    const timestamp  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const filename   = `audit_log_${timestamp}.xlsx`;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `audit_log_${timestamp}.xlsx`;
 
-    res.setHeader('Content-Type',        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     await workbook.xlsx.write(res);
@@ -512,6 +528,70 @@ app.put('/api/projects/:id', authenticateToken, (req, res) => { const { project_
 app.delete('/api/projects/:id', authenticateToken, (req, res) => { db.get("SELECT project_code FROM projects WHERE id=?", [req.params.id], (e, proj) => { db.run("DELETE FROM projects WHERE id=?", req.params.id, function (err) { if (err) return res.status(500).json({ error: err.message }); logActivity(req.user.username, 'DELETE_PROJECT', 'project', req.params.id, 'Deleted: ' + (proj ? proj.project_code : req.params.id)); res.json({ success: true }); }); }); });
 
 // ==========================================
+// STOCKS ENDPOINTS
+// ==========================================
+app.get('/api/stocks', authenticateToken, (req, res) => {
+  db.all("SELECT * FROM stocks ORDER BY item_name ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/stocks', authenticateToken, (req, res) => {
+  const { id, item_name, sku, category, quantity, unit, reorder_level, unit_cost, project_code } = req.body;
+  const newId = id || Math.random().toString(36).substr(2, 9);
+  const last_updated = new Date().toISOString();
+  db.run(
+    "INSERT INTO stocks (id, item_name, sku, category, quantity, unit, reorder_level, unit_cost, project_code, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [newId, item_name, sku, category, quantity || 0, unit || '', reorder_level || 10, unit_cost || 0, project_code || null, last_updated],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      logActivity(req.user.username, 'CREATE_STOCK_ITEM', 'stock', newId, `Created item: ${item_name} (SKU: ${sku || 'N/A'})`);
+      res.json({ success: true, id: newId });
+    }
+  );
+});
+
+app.put('/api/stocks/:id', authenticateToken, (req, res) => {
+  const { item_name, sku, category, quantity, unit, reorder_level, unit_cost, project_code } = req.body;
+  const last_updated = new Date().toISOString();
+  let fields = [];
+  let params = [];
+
+  if (item_name !== undefined) { fields.push("item_name=?"); params.push(item_name); }
+  if (sku !== undefined) { fields.push("sku=?"); params.push(sku); }
+  if (category !== undefined) { fields.push("category=?"); params.push(category); }
+  if (quantity !== undefined) { fields.push("quantity=?"); params.push(quantity); }
+  if (unit !== undefined) { fields.push("unit=?"); params.push(unit); }
+  if (reorder_level !== undefined) { fields.push("reorder_level=?"); params.push(reorder_level); }
+  if (unit_cost !== undefined) { fields.push("unit_cost=?"); params.push(unit_cost); }
+  if (project_code !== undefined) { fields.push("project_code=?"); params.push(project_code); }
+
+  if (fields.length === 0) return res.json({ success: true, message: "No changes" });
+
+  fields.push("last_updated=?");
+  params.push(last_updated);
+
+  params.push(req.params.id);
+
+  db.run('UPDATE stocks SET ' + fields.join(', ') + ' WHERE id=?', params, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    logActivity(req.user.username, 'UPDATE_STOCK_ITEM', 'stock', req.params.id, `Updated item ${item_name || 'ID: ' + req.params.id}`);
+    res.json({ success: true });
+  });
+});
+
+app.delete('/api/stocks/:id', authenticateToken, (req, res) => {
+  db.get("SELECT item_name FROM stocks WHERE id=?", [req.params.id], (e, stock) => {
+    db.run("DELETE FROM stocks WHERE id=?", req.params.id, function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      logActivity(req.user.username, 'DELETE_STOCK_ITEM', 'stock', req.params.id, `Deleted: ${stock ? stock.item_name : req.params.id}`);
+      res.json({ success: true });
+    });
+  });
+});
+
+// ==========================================================
 // CATEGORIES ENDPOINTS
 // ==========================================
 app.get('/api/categories', authenticateToken, (req, res) => { db.all("SELECT * FROM expense_categories ORDER BY name ASC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); res.json(rows); }); });
@@ -536,14 +616,14 @@ app.get('/api/disbursements', authenticateToken, (req, res) => {
 app.post('/api/disbursements', authenticateToken, (req, res) => {
   const data = req.body;
 
-  // Backend validation: Compute expected net amount (Gross - EWT)
-  const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0);
+  // Backend validation: Compute expected net amount (Gross - EWT - Stocks)
+  const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
   if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
     return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
   }
 
-  const stmt = db.prepare('INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, bank, check_no, or_inv_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at, costing_type, attachments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-  stmt.run(data.id, data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), function (err) {
+  const stmt = db.prepare('INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, bank, check_no, or_inv_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at, costing_type, attachments_json, stocks_amount, stock_description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  stmt.run(data.id, data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', function (err) {
     if (err) return res.status(500).json({ error: err.message });
     logActivity(req.user.username, 'CREATE_DISBURSEMENT', 'disbursement', data.id, 'CV# ' + data.cv_no + ' | Project: ' + data.project_code + ' | Amount: ' + data.gross_amount);
     res.json({ success: true, message: 'Record saved successfully.' });
@@ -554,14 +634,14 @@ app.post('/api/disbursements', authenticateToken, (req, res) => {
 app.put('/api/disbursements/:id', authenticateToken, (req, res) => {
   const data = req.body; const id = req.params.id;
 
-  // Backend validation: Compute expected net amount (Gross - EWT)
-  const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0);
+  // Backend validation: Compute expected net amount (Gross - EWT - Stocks)
+  const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
   if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
     return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
   }
 
-  const stmt = db.prepare('UPDATE disbursements SET project_code=?, date=?, payee=?, particulars=?, tin=?, cv_no=?, bank=?, check_no=?, or_inv_no=?, accts_pay=?, input_tax=?, output_tax=?, target_cib=?, gross_amount=?, ewt_amount=?, net_amount=?, expenses_json=?, costing_type=?, attachments_json=? WHERE id=?');
-  stmt.run(data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.costing_type || 'normal', JSON.stringify(data.attachments || []), id, function (err) {
+  const stmt = db.prepare('UPDATE disbursements SET project_code=?, date=?, payee=?, particulars=?, tin=?, cv_no=?, bank=?, check_no=?, or_inv_no=?, accts_pay=?, input_tax=?, output_tax=?, target_cib=?, gross_amount=?, ewt_amount=?, net_amount=?, expenses_json=?, costing_type=?, attachments_json=?, stocks_amount=?, stock_description=? WHERE id=?');
+  stmt.run(data.project_code, data.date, data.payee, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
     logActivity(req.user.username, 'UPDATE_DISBURSEMENT', 'disbursement', id, 'CV# ' + data.cv_no + ' | Project: ' + data.project_code);
     res.json({ success: true, message: 'Record updated successfully.' });
@@ -647,32 +727,32 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
       let totalCrEWT = 0;
 
       processedRows.forEach(row => {
-         totalDrGross += parseFloat(row.gross_amount) || 0;
-         const isCreditCard = row.project_code && row.project_code.toLowerCase() === 'credit card';
-         const originalNet = parseFloat(row.net_amount) || 0;
-         const originalAcctsPay = parseFloat(row.accts_pay) || 0;
-         // Combine CIB and Accts Pay
-         totalCrCIB += (isCreditCard ? 0 : originalNet) + (isCreditCard ? (originalAcctsPay + originalNet) : originalAcctsPay);
-         totalCrEWT += parseFloat(row.ewt_amount) || 0;
+        totalDrGross += parseFloat(row.gross_amount) || 0;
+        const isCreditCard = row.project_code && row.project_code.toLowerCase() === 'credit card';
+        const originalNet = parseFloat(row.net_amount) || 0;
+        const originalAcctsPay = parseFloat(row.accts_pay) || 0;
+        // Combine CIB and Accts Pay
+        totalCrCIB += (isCreditCard ? 0 : originalNet) + (isCreditCard ? (originalAcctsPay + originalNet) : originalAcctsPay);
+        totalCrEWT += parseFloat(row.ewt_amount) || 0;
       });
 
       // Format Date String
       const monthNames = {
-         '01': 'JANUARY', '02': 'FEBRUARY', '03': 'MARCH', '04': 'APRIL', '05': 'MAY', '06': 'JUNE',
-         '07': 'JULY', '08': 'AUGUST', '09': 'SEPTEMBER', '10': 'OCTOBER', '11': 'NOVEMBER', '12': 'DECEMBER'
+        '01': 'JANUARY', '02': 'FEBRUARY', '03': 'MARCH', '04': 'APRIL', '05': 'MAY', '06': 'JUNE',
+        '07': 'JULY', '08': 'AUGUST', '09': 'SEPTEMBER', '10': 'OCTOBER', '11': 'NOVEMBER', '12': 'DECEMBER'
       };
-      
+
       let dateString = '';
       if (monthArray.length > 0 && yearArray.length > 0) {
-         const mStr = monthArray.map(m => monthNames[m] || m).join(', ');
-         const yStr = yearArray.join(', ');
-         dateString = `For the month of ${mStr} ${yStr}`;
+        const mStr = monthArray.map(m => monthNames[m] || m).join(', ');
+        const yStr = yearArray.join(', ');
+        dateString = `For the month of ${mStr} ${yStr}`;
       } else if (monthArray.length > 0) {
-         dateString = `For the month of ${monthArray.map(m => monthNames[m] || m).join(', ')}`;
+        dateString = `For the month of ${monthArray.map(m => monthNames[m] || m).join(', ')}`;
       } else if (yearArray.length > 0) {
-         dateString = `For the year ${yearArray.join(', ')}`;
+        dateString = `For the year ${yearArray.join(', ')}`;
       } else {
-         dateString = `All Records`;
+        dateString = `All Records`;
       }
 
       // Add Summary Rows (Rows 1 to 5)
@@ -684,16 +764,16 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
 
       // Style Summary block
       [sumR1, sumR2, sumR3, sumR4].forEach(r => {
-         r.getCell(1).font = { bold: true, name: 'Calibri', size: 11 };
-         r.getCell(4).numFmt = '#,##0.00';
-         r.getCell(5).numFmt = '#,##0.00';
+        r.getCell(1).font = { bold: true, name: 'Calibri', size: 11 };
+        r.getCell(4).numFmt = '#,##0.00';
+        r.getCell(5).numFmt = '#,##0.00';
       });
 
       sumR1.getCell(4).font = { bold: true, color: { argb: 'FF2563EB' } };
       sumR1.getCell(5).font = { bold: true, color: { argb: 'FF2563EB' } };
       sumR1.getCell(4).alignment = { horizontal: 'center' };
       sumR1.getCell(5).alignment = { horizontal: 'center' };
-      
+
       sumR3.getCell(5).border = { bottom: { style: 'thin' } };
       sumR4.getCell(4).border = { top: { style: 'thin' }, bottom: { style: 'double' } };
       sumR4.getCell(5).border = { bottom: { style: 'double' } };
@@ -708,43 +788,43 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
       let headers = [];
 
       if (transactionFilter === 'EWT') {
-         colDefinitions = [
-           { key: 'date', width: 11 },
-           { key: 'payee', width: 18 },
-           { key: 'cv_no', width: 10 },
-           { key: 'project', width: 10 },
-           { key: 'gross', width: 13 },
-           { key: 'ewt', width: 12 },
-           { key: 'labor_payroll', width: 15 },
-           { key: 'particulars', width: 25 }
-         ];
-         headers = ['Date', 'Payee', 'CV No.', 'Project', 'Debit (Gross)', 'EWT', 'LABOR/PAYROLL', 'Particulars'];
+        colDefinitions = [
+          { key: 'date', width: 11 },
+          { key: 'payee', width: 18 },
+          { key: 'cv_no', width: 10 },
+          { key: 'project', width: 10 },
+          { key: 'gross', width: 13 },
+          { key: 'ewt', width: 12 },
+          { key: 'labor_payroll', width: 15 },
+          { key: 'particulars', width: 25 }
+        ];
+        headers = ['Date', 'Payee', 'CV No.', 'Project', 'Debit (Gross)', 'EWT', 'LABOR/PAYROLL', 'Particulars'];
       } else {
-         colDefinitions = [
-           { key: 'date', width: 15 },
-           { key: 'payee', width: 25 },
-           { key: 'cv_no', width: 15 },
-           { key: 'project', width: 18 },
-           { key: 'gross', width: 18 },
-           { key: 'cib', width: 18 },
-           { key: 'accts_pay', width: 22 },
-           { key: 'ewt', width: 18 }
-         ];
-         dynamicCategories.forEach(cat => {
-           colDefinitions.push({ key: `cat_${cat}`, width: 16 });
-         });
-         colDefinitions.push({ key: 'particulars', width: 40 });
+        colDefinitions = [
+          { key: 'date', width: 15 },
+          { key: 'payee', width: 25 },
+          { key: 'cv_no', width: 15 },
+          { key: 'project', width: 18 },
+          { key: 'gross', width: 18 },
+          { key: 'cib', width: 18 },
+          { key: 'accts_pay', width: 22 },
+          { key: 'ewt', width: 18 }
+        ];
+        dynamicCategories.forEach(cat => {
+          colDefinitions.push({ key: `cat_${cat}`, width: 16 });
+        });
+        colDefinitions.push({ key: 'particulars', width: 40 });
 
-         headers = ['Date', 'Payee', 'CV No.', 'Project', 'Debit (Gross)', 'Credit (CIB)', 'Accts Pay (Credit Card)', 'EWT'];
-         dynamicCategories.forEach(cat => headers.push(cat));
-         headers.push('Particulars');
+        headers = ['Date', 'Payee', 'CV No.', 'Project', 'Debit (Gross)', 'Credit (CIB)', 'Accts Pay (Credit Card)', 'EWT'];
+        dynamicCategories.forEach(cat => headers.push(cat));
+        headers.push('Particulars');
       }
 
       // Apply widths and keys manually
       colDefinitions.forEach((col, i) => {
-         const colObj = sheet.getColumn(i + 1);
-         colObj.width = col.width;
-         colObj.key = col.key;
+        const colObj = sheet.getColumn(i + 1);
+        colObj.width = col.width;
+        colObj.key = col.key;
       });
 
       // ADD HEADER ROW (Row 6)
@@ -778,7 +858,7 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
       // Populate Data Rows
       processedRows.forEach((row, idx) => {
         const isCreditCard = row.project_code && row.project_code.toLowerCase() === 'credit card';
-        
+
         let grossAmount = parseFloat(row.gross_amount) || 0;
         let originalNet = parseFloat(row.net_amount) || 0;
         let originalAcctsPay = parseFloat(row.accts_pay) || 0;
@@ -790,39 +870,39 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
         let rowData = {};
 
         if (transactionFilter === 'EWT') {
-           let laborAmount = 0;
-           row.expenses.forEach(e => {
-               if (e.category && (e.category.toUpperCase() === 'LABOR/PAYROLL' || e.category.toUpperCase().includes('LABOR'))) {
-                   laborAmount += parseFloat(e.amount) || 0;
-               }
-           });
-           rowData = {
-             date: row.date || '',
-             payee: row.payee || '',
-             cv_no: row.cv_no ? `#${row.cv_no}` : '',
-             project: row.project_code || '',
-             gross: grossAmount,
-             ewt: ewtAmount,
-             labor_payroll: laborAmount,
-             particulars: row.particulars || ''
-           };
+          let laborAmount = 0;
+          row.expenses.forEach(e => {
+            if (e.category && (e.category.toUpperCase() === 'LABOR/PAYROLL' || e.category.toUpperCase().includes('LABOR'))) {
+              laborAmount += parseFloat(e.amount) || 0;
+            }
+          });
+          rowData = {
+            date: row.date || '',
+            payee: row.payee || '',
+            cv_no: row.cv_no ? `#${row.cv_no}` : '',
+            project: row.project_code || '',
+            gross: grossAmount,
+            ewt: ewtAmount,
+            labor_payroll: laborAmount,
+            particulars: row.particulars || ''
+          };
         } else {
-           rowData = {
-             date: row.date || '',
-             payee: row.payee || '',
-             cv_no: row.cv_no ? `#${row.cv_no}` : '',
-             project: row.project_code || '',
-             gross: grossAmount,
-             cib: cib,
-             accts_pay: finalAcctsPay,
-             ewt: ewtAmount,
-             particulars: row.particulars || ''
-           };
-           // Add dynamic category amounts
-           dynamicCategories.forEach(cat => {
-             const exp = row.expenses.find(e => e.category === cat);
-             rowData[`cat_${cat}`] = (exp && parseFloat(exp.amount)) ? parseFloat(exp.amount) : 0;
-           });
+          rowData = {
+            date: row.date || '',
+            payee: row.payee || '',
+            cv_no: row.cv_no ? `#${row.cv_no}` : '',
+            project: row.project_code || '',
+            gross: grossAmount,
+            cib: cib,
+            accts_pay: finalAcctsPay,
+            ewt: ewtAmount,
+            particulars: row.particulars || ''
+          };
+          // Add dynamic category amounts
+          dynamicCategories.forEach(cat => {
+            const exp = row.expenses.find(e => e.category === cat);
+            rowData[`cat_${cat}`] = (exp && parseFloat(exp.amount)) ? parseFloat(exp.amount) : 0;
+          });
         }
 
         const dataRow = sheet.addRow(rowData);
@@ -839,7 +919,7 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
           cell.border = thinBorder;
           cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } };
           cell.alignment = { vertical: 'middle', wrapText: true };
-          
+
           // EWT column highlight
           if (colNumber === ewtColIndex) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE4E6' } };
@@ -853,10 +933,10 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
               cell.value = null; // To display blank instead of 0 if preferred, or keep 0. Let's keep 0 but Excel will format it
             }
           }
-          
+
           // Align CV No and Project to center
           if (colNumber === 3 || colNumber === 4) {
-             cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
           }
         });
         dataRow.height = 18;
@@ -872,35 +952,35 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
       // Add SUM formulas
       const rowCount = processedRows.length;
       if (rowCount > 0) {
-         const endRow = sheet.rowCount - 1;
-         
-         const sumCols = [];
-         const lastNumCol = transactionFilter === 'EWT' ? 7 : (8 + dynamicCategories.length);
-         for(let c = 5; c <= lastNumCol; c++) {
-            sumCols.push(c);
-         }
+        const endRow = sheet.rowCount - 1;
 
-         const ewtColIndex = transactionFilter === 'EWT' ? 6 : 8;
+        const sumCols = [];
+        const lastNumCol = transactionFilter === 'EWT' ? 7 : (8 + dynamicCategories.length);
+        for (let c = 5; c <= lastNumCol; c++) {
+          sumCols.push(c);
+        }
 
-         sumCols.forEach(colIndex => {
-            const colLetter = sheet.getColumn(colIndex).letter;
-            const cell = summaryRow.getCell(colIndex);
-            cell.value = { formula: `SUM(${colLetter}${startDataRowIndex}:${colLetter}${endRow})` };
-            cell.numFmt = '"₱"#,##0.00';
-            cell.font = { bold: true, name: 'Calibri', size: 11, color: { argb: 'FF1E293B' } };
-            // Highlight EWT sum
-            if (colIndex === ewtColIndex) {
-               cell.font = { bold: true, name: 'Calibri', size: 11, color: { argb: 'FF9F1239' } };
-               cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE4E6' } };
-            }
-         });
+        const ewtColIndex = transactionFilter === 'EWT' ? 6 : 8;
+
+        sumCols.forEach(colIndex => {
+          const colLetter = sheet.getColumn(colIndex).letter;
+          const cell = summaryRow.getCell(colIndex);
+          cell.value = { formula: `SUM(${colLetter}${startDataRowIndex}:${colLetter}${endRow})` };
+          cell.numFmt = '"₱"#,##0.00';
+          cell.font = { bold: true, name: 'Calibri', size: 11, color: { argb: 'FF1E293B' } };
+          // Highlight EWT sum
+          if (colIndex === ewtColIndex) {
+            cell.font = { bold: true, name: 'Calibri', size: 11, color: { argb: 'FF9F1239' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE4E6' } };
+          }
+        });
       }
 
       summaryRow.eachCell({ includeEmpty: true }, (cell) => {
-         cell.border = {
-            top: { style: 'thin', color: { argb: 'FF94A3B8' } },
-            bottom: { style: 'double', color: { argb: 'FF1E293B' } }
-         };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+          bottom: { style: 'double', color: { argb: 'FF1E293B' } }
+        };
       });
       summaryRow.height = 24;
       summaryRow.commit();
@@ -908,9 +988,9 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       let filePrefix = 'All_Transaction_Disbursement';
       if (transactionFilter === 'EWT') {
-         filePrefix = 'EWT_Transaction_Disbursement';
+        filePrefix = 'EWT_Transaction_Disbursement';
       } else if (transactionFilter && transactionFilter !== 'All') {
-         filePrefix = `${transactionFilter}_Transaction_Disbursement`;
+        filePrefix = `${transactionFilter}_Transaction_Disbursement`;
       }
       const filename = `${filePrefix}_${timestamp}.xlsx`;
 
@@ -1106,7 +1186,7 @@ app.post('/api/db/import', authenticateToken, requireCEO, dbUpload.single('dbFil
 
     // Clean up temp upload
     if (fs.existsSync(uploadedPath)) {
-      try { fs.unlinkSync(uploadedPath); } catch (_) {}
+      try { fs.unlinkSync(uploadedPath); } catch (_) { }
     }
 
     res.status(500).json({ error: 'Database import failed. The original database has been restored. Error: ' + err.message });
