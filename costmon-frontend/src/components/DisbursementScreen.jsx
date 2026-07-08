@@ -1008,58 +1008,66 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                 </button>
 
                 {isFilterOpen && (
-                  <div className="absolute left-0 mt-3 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="absolute left-0 mt-3 w-[500px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in-95">
                     <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
                       <span className="font-black text-slate-700 dark:text-slate-300 text-sm tracking-tight uppercase">Filter by Date</span>
                       <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-rose-500 transition-colors"><X size={18} /></button>
                     </div>
-                    <div className="p-4 space-y-5 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                      <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
-                          <span>Months</span>
-                          <button onClick={() => setTempSelectedMonths([])} className="text-[10px] text-blue-500 hover:text-blue-600 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">Clear</button>
-                        </label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {monthOptions.map(m => (
-                            <button
-                              key={m.value}
-                              onClick={() => handleToggleMonth(m.value)}
-                              className={`px-2 py-2 text-[11px] rounded-lg border font-bold transition-all ${tempSelectedMonths.includes(m.value) ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200 dark:shadow-none' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`}
-                            >
-                              {m.label.substring(0, 3)}
-                            </button>
-                          ))}
+                    <div className="p-5 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                      <div className="flex flex-col sm:flex-row gap-6">
+                        {/* LEFT COLUMN: MONTHS */}
+                        <div className="flex-[1.2] space-y-3">
+                          <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
+                            <span>Months</span>
+                            <button onClick={() => setTempSelectedMonths([])} className="text-[10px] text-blue-500 hover:text-blue-600 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">Clear</button>
+                          </label>
+                          <div className="grid grid-cols-4 gap-2">
+                            {monthOptions.map(m => (
+                              <button
+                                key={m.value}
+                                onClick={() => handleToggleMonth(m.value)}
+                                className={`px-2 py-2 text-[11px] rounded-lg border font-bold transition-all ${tempSelectedMonths.includes(m.value) ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200 dark:shadow-none' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`}
+                              >
+                                {m.label.substring(0, 3)}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
-                          <span>Years</span>
-                          <button onClick={() => setTempSelectedYears([])} className="text-[10px] text-blue-500 hover:text-blue-600 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">Clear</button>
-                        </label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {availableYears.map(year => (
-                            <button
-                              key={year}
-                              onClick={() => handleToggleYear(year)}
-                              className={`px-2 py-2 text-[11px] rounded-lg border font-bold transition-all ${tempSelectedYears.includes(year) ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200 dark:shadow-none' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`}
+
+                        {/* RIGHT COLUMN: YEARS & TRANSACTION TYPE */}
+                        <div className="flex-1 flex flex-col gap-6">
+                          <div className="space-y-3">
+                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
+                              <span>Years</span>
+                              <button onClick={() => setTempSelectedYears([])} className="text-[10px] text-blue-500 hover:text-blue-600 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">Clear</button>
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {availableYears.map(year => (
+                                <button
+                                  key={year}
+                                  onClick={() => handleToggleYear(year)}
+                                  className={`px-2 py-2 text-[11px] rounded-lg border font-bold transition-all ${tempSelectedYears.includes(year) ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200 dark:shadow-none' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`}
+                                >
+                                  {year}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 border-t border-slate-100 dark:border-slate-700 pt-4">
+                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
+                              <span>Transaction Type</span>
+                            </label>
+                            <select
+                              value={tempSelectedTransactionFilter}
+                              onChange={(e) => setTempSelectedTransactionFilter(e.target.value)}
+                              className="w-full p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors cursor-pointer"
                             >
-                              {year}
-                            </button>
-                          ))}
+                              <option value="All">All Transactions</option>
+                              <option value="EWT">With EWT Payable</option>
+                            </select>
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-3 border-t border-slate-100 dark:border-slate-700 pt-4">
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
-                          <span>Transaction Type</span>
-                        </label>
-                        <select
-                          value={tempSelectedTransactionFilter}
-                          onChange={(e) => setTempSelectedTransactionFilter(e.target.value)}
-                          className="w-full p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors cursor-pointer"
-                        >
-                          <option value="All">All Transactions</option>
-                          <option value="EWT">With EWT Payable</option>
-                        </select>
                       </div>
                     </div>
                     <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex gap-2">
