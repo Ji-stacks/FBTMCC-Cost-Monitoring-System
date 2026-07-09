@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Loader2, Search } from 'lucide-react';
+import { Package, Loader2, Search, Edit } from 'lucide-react';
 import { API_URL } from '../utils/Constants';
 
-export default function StocksScreen() {
+export default function StocksScreen({ onNavigateToDisbursement }) {
     const [disbursements, setDisbursements] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -69,14 +69,16 @@ export default function StocksScreen() {
                             <thead>
                                 <tr className="bg-slate-800 dark:bg-slate-950 text-slate-200 uppercase text-xs font-black tracking-widest border-b-4 border-blue-500">
                                     <th className="px-6 py-4 whitespace-nowrap">CV #</th>
+                                    <th className="px-6 py-4 whitespace-nowrap">Invoice #</th>
                                     <th className="px-6 py-4 whitespace-nowrap">Item Description</th>
                                     <th className="px-6 py-4 whitespace-nowrap text-right">Stocks Amount</th>
+                                    <th className="px-6 py-4 whitespace-nowrap text-center w-24">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan="3" className="px-6 py-12 text-center">
+                                        <td colSpan="5" className="px-6 py-12 text-center">
                                             <div className="flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 gap-3">
                                                 <Loader2 className="animate-spin" size={32} />
                                                 <span className="font-bold uppercase tracking-wider text-sm">Loading Records...</span>
@@ -85,7 +87,7 @@ export default function StocksScreen() {
                                     </tr>
                                 ) : filteredRecords.length === 0 ? (
                                     <tr>
-                                        <td colSpan="3" className="px-6 py-16 text-center">
+                                        <td colSpan="5" className="px-6 py-16 text-center">
                                             <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 gap-3">
                                                 <Package size={48} className="opacity-50" />
                                                 <span className="font-bold uppercase tracking-wider text-sm">No stock records found.</span>
@@ -101,11 +103,23 @@ export default function StocksScreen() {
                                             <td className="px-6 py-4 font-black text-blue-700 dark:text-blue-400 border-r border-slate-100 dark:border-slate-700 w-32">
                                                 {record.cv_no ? `#${record.cv_no}` : '-'}
                                             </td>
+                                            <td className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 border-r border-slate-100 dark:border-slate-700 whitespace-nowrap uppercase">
+                                                {record.or_inv_no || '-'}
+                                            </td>
                                             <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-bold border-r border-slate-100 dark:border-slate-700 whitespace-normal break-words max-w-xs uppercase">
                                                 {record.stock_description || '-'}
                                             </td>
-                                            <td className="px-6 py-4 text-right font-mono font-black text-slate-900 dark:text-white w-48">
+                                            <td className="px-6 py-4 text-right font-mono font-black text-slate-900 dark:text-white w-48 border-r border-slate-100 dark:border-slate-700">
                                                 ₱ {parseFloat(record.stocks_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="px-6 py-4 text-center w-24">
+                                                <button
+                                                    onClick={() => onNavigateToDisbursement && onNavigateToDisbursement(record.cv_no, record.id)}
+                                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 dark:text-blue-400 font-bold text-xs rounded-lg transition-colors shadow-sm"
+                                                    title="Edit Disbursement"
+                                                >
+                                                    <Edit size={14} /> Edit
+                                                </button>
                                             </td>
                                         </tr>
                                     ))
