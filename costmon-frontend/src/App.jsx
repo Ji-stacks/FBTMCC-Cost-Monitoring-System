@@ -443,7 +443,7 @@ export default function App() {
           <Route 
             path="/stocks" 
             element={
-              <StocksScreen />
+              <StocksScreen onNavigateToDisbursement={navigateToDisbursement} />
             } 
           />
         </Routes>
