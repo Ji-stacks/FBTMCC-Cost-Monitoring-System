@@ -600,27 +600,29 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                   <div className="flex-1 border-r-2 border-slate-400 dark:border-slate-600 flex flex-col">
                     <div className="bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-400 text-center font-black text-xs uppercase py-3 border-b-2 border-slate-400 dark:border-slate-600 tracking-wider">Progress-Based Costing</div>
                     <div className="p-6 space-y-3 text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex-1 flex flex-col">
-                      {/* MISCELLANEOUS COST AT THE TOP */}
-                      {expensesByCategory[MISC_KEY] && expensesByCategory[MISC_KEY].length > 0 && (
-                        <div className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
-                          <span className="truncate pr-2 text-slate-800 dark:text-slate-200">Miscellaneous Cost:</span>
-                          <span className="font-mono font-black text-slate-900 dark:text-white">
-                            {formatMoney(expensesByCategory[MISC_KEY].reduce((sum, item) => sum + item.amount, 0))}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* DYNAMIC CATEGORIES */}
-                      {displayedCategories.filter(cat => cat !== MISC_KEY).map(cat => {
-                        const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.amount, 0) || 0;
-                        if (catTotal === 0) return null;
-                        return (
-                          <div key={cat} className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
-                            <span className="truncate pr-2">{cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase()}:</span>
-                            <span className="font-mono font-black">{formatMoney(catTotal)}</span>
+                      <div className="max-h-[260px] overflow-y-auto space-y-3 pr-3 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                        {/* MISCELLANEOUS COST AT THE TOP */}
+                        {expensesByCategory[MISC_KEY] && expensesByCategory[MISC_KEY].length > 0 && (
+                          <div className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
+                            <span className="truncate pr-2 text-slate-800 dark:text-slate-200">Miscellaneous Cost:</span>
+                            <span className="font-mono font-black text-slate-900 dark:text-white">
+                              {formatMoney(expensesByCategory[MISC_KEY].reduce((sum, item) => sum + item.amount, 0))}
+                            </span>
                           </div>
-                        );
-                      })}
+                        )}
+
+                        {/* DYNAMIC CATEGORIES */}
+                        {displayedCategories.filter(cat => cat !== MISC_KEY).map(cat => {
+                          const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.amount, 0) || 0;
+                          if (catTotal === 0) return null;
+                          return (
+                            <div key={cat} className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
+                              <span className="truncate pr-2">{cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase()}:</span>
+                              <span className="font-mono font-black">{formatMoney(catTotal)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
 
                       <div className="mt-auto pt-4 flex justify-between items-center border-t-2 border-slate-400 dark:border-slate-600">
                         <span className="font-black tracking-wider">DIRECT COST</span>
