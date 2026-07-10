@@ -1186,6 +1186,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   // ==========================================
   // RENDER UI
   // ==========================================
+  const usedMainCategories = costingGroups.flatMap(g => g.constructionLines.map(l => l.category)).filter(Boolean);
+  const usedMiscCategories = costingGroups.flatMap(g => g.miscLines.map(l => l.category)).filter(Boolean);
+
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] dark:bg-slate-900 overflow-hidden transition-colors duration-300">
       {/* HEADER */}
@@ -1805,6 +1808,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         onChange={(val) => handleLineChange(group.id, line.id, 'category', val, 'construction')}
                                         placeholder="-- Find Construction Category --"
                                         hasError={lineErrors.includes(line.id)}
+                                        disabledOptions={usedMainCategories}
                                       />
                                     </div>
                                     <div className="w-36 relative mt-1">
@@ -1852,6 +1856,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         onChange={(val) => handleLineChange(group.id, line.id, 'category', val, 'misc')}
                                         placeholder="-- Find Miscellaneous Item --"
                                         hasError={lineErrors.includes(line.id)}
+                                        disabledOptions={usedMiscCategories}
                                       />
                                     </div>
                                     <div className="w-36 relative mt-1">
