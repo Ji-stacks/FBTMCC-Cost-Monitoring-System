@@ -600,32 +600,33 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                   <div className="flex-1 border-r-2 border-slate-400 dark:border-slate-600 flex flex-col">
                     <div className="bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-400 text-center font-black text-xs uppercase py-3 border-b-2 border-slate-400 dark:border-slate-600 tracking-wider">Progress-Based Costing</div>
                     <div className="p-6 space-y-3 text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex-1 flex flex-col">
-                      {["PERMITS & CONSTRUCTION PLANS", "DOWN PAYMENT", "CARPENTRY", "PAINTING", "ELECTRICAL", "PLUMBING", "TEMPERED GLASS", "MISCELLANEOUS COST", "LABOR/PAYROLL", "SOP"].map(cat => {
+                      {/* MISCELLANEOUS COST AT THE TOP */}
+                      {expensesByCategory[MISC_KEY] && expensesByCategory[MISC_KEY].length > 0 && (
+                        <div className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
+                          <span className="truncate pr-2 text-slate-800 dark:text-slate-200">Miscellaneous Cost:</span>
+                          <span className="font-mono font-black text-slate-900 dark:text-white">
+                            {formatMoney(expensesByCategory[MISC_KEY].reduce((sum, item) => sum + item.amount, 0))}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* DYNAMIC CATEGORIES */}
+                      {displayedCategories.filter(cat => cat !== MISC_KEY).map(cat => {
                         const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.amount, 0) || 0;
                         if (catTotal === 0) return null;
                         return (
                           <div key={cat} className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
-                            <span className="truncate pr-2">{cat === "PERMITS & CONSTRUCTION PLANS" ? "Permits & Const'n Plans" : cat.charAt(0) + cat.slice(1).toLowerCase()}:</span>
+                            <span className="truncate pr-2">{cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase()}:</span>
                             <span className="font-mono font-black">{formatMoney(catTotal)}</span>
                           </div>
                         );
                       })}
 
-                      <div className="pt-2 text-[10px] text-slate-500 dark:text-slate-400 space-y-2">
-                        {["ABB 1196 FORWARD", "ZAM-546"].map(cat => {
-                          const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.amount, 0) || 0;
-                          if (catTotal === 0) return null;
-                          return (
-                            <div key={cat} className="flex justify-between">
-                              <span>{cat === "ABB 1196 FORWARD" ? "ABB Forward" : "ZAM 546"}</span><span className="font-mono">{formatMoney(catTotal)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
                       <div className="mt-auto pt-4 flex justify-between items-center border-t-2 border-slate-400 dark:border-slate-600">
                         <span className="font-black tracking-wider">DIRECT COST</span>
-                        <span className="font-black font-mono text-sm text-slate-900 dark:text-white">{formatMoney(Object.values(expensesByCategory).flat().reduce((sum, item) => sum + item.amount, 0))}</span>
+                        <span className="font-black font-mono text-sm text-slate-900 dark:text-white">
+                          {formatMoney(financials.totalNormalExpenses)}
+                        </span>
                       </div>
                     </div>
                   </div>
