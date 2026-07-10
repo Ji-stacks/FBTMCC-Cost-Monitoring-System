@@ -623,8 +623,9 @@ app.get('/api/disbursements', authenticateToken, (req, res) => {
 app.post('/api/disbursements', authenticateToken, (req, res) => {
   const dataList = Array.isArray(req.body) ? req.body : [req.body];
 
-  // Backend validation: Compute expected net amount (Gross - EWT - Stocks)
+  // Backend validation: skip net-amount check for stock allocation entries (stocks_amount is forced to 0)
   for (let data of dataList) {
+    if (data.is_stock_allocation) continue; // allocation records have stocks_amount=0; integrity already correct
     const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
     if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
       return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
@@ -642,7 +643,9 @@ app.post('/api/disbursements', authenticateToken, (req, res) => {
       if (hasError) return;
       const newId = Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
       
-      stmt.run(newId, data.project_code || null, data.date, data.payee || null, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', function (err) {
+      const s = (val) => (val === "" || val === undefined) ? null : val;
+      
+      stmt.run(newId, s(data.project_code), data.date, s(data.payee), s(data.particulars), s(data.tin), s(data.cv_no), s(data.bank), s(data.check_no), s(data.or_inv_no), data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', function (err) {
         if (hasError) return;
         if (err) {
           hasError = true;
@@ -651,13 +654,41 @@ app.post('/api/disbursements', authenticateToken, (req, res) => {
         }
         
         logActivity(req.user.username, 'CREATE_DISBURSEMENT', 'disbursement', newId, 'CV# ' + data.cv_no + ' | Project: ' + data.project_code + ' | Amount: ' + data.gross_amount);
-        
-        completed++;
-        if (completed === dataList.length) {
-          db.run("COMMIT", (commitErr) => {
-            if (commitErr) return res.status(500).json({ error: commitErr.message });
-            res.json({ success: true, message: 'Record(s) saved successfully.' });
-          });
+
+        const afterInsert = () => {
+          completed++;
+          if (completed === dataList.length) {
+            db.run("COMMIT", (commitErr) => {
+              if (commitErr) return res.status(500).json({ error: commitErr.message });
+              res.json({ success: true, message: 'Record(s) saved successfully.' });
+            });
+          }
+        };
+
+        // If this is a stock allocation, deduct the explicit allocated_amount from the source stock record
+        if (data.is_stock_allocation && data.source_cv_no && data.allocated_amount > 0) {
+          const deductAmount = Number(data.allocated_amount);
+          db.run(
+            "UPDATE disbursements SET stocks_amount = stocks_amount - ? WHERE cv_no = ?",
+            [deductAmount, data.source_cv_no],
+            function (deductErr) {
+              if (hasError) return;
+              if (deductErr) {
+                hasError = true;
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: 'Stock deduction failed: ' + deductErr.message });
+              }
+              if (this.changes === 0) {
+                hasError = true;
+                db.run("ROLLBACK");
+                return res.status(400).json({ error: `Stock deduction failed: CV# ${data.source_cv_no} not found or insufficient stock.` });
+              }
+              logActivity(req.user.username, 'STOCK_ALLOCATION', 'disbursement', newId, `Deducted ₱${deductAmount} from stock CV# ${data.source_cv_no}`);
+              afterInsert();
+            }
+          );
+        } else {
+          afterInsert();
         }
       });
     });
@@ -674,8 +705,9 @@ app.put('/api/disbursements/:id', authenticateToken, (req, res) => {
     return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
   }
 
+  const s = (val) => (val === "" || val === undefined) ? null : val;
   const stmt = db.prepare('UPDATE disbursements SET project_code=?, date=?, payee=?, particulars=?, tin=?, cv_no=?, bank=?, check_no=?, or_inv_no=?, accts_pay=?, input_tax=?, output_tax=?, target_cib=?, gross_amount=?, ewt_amount=?, net_amount=?, expenses_json=?, costing_type=?, attachments_json=?, stocks_amount=?, stock_description=? WHERE id=?');
-  stmt.run(data.project_code || null, data.date, data.payee || null, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', id, function (err) {
+  stmt.run(s(data.project_code), data.date, s(data.payee), s(data.particulars), s(data.tin), s(data.cv_no), s(data.bank), s(data.check_no), s(data.or_inv_no), data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
     logActivity(req.user.username, 'UPDATE_DISBURSEMENT', 'disbursement', id, 'CV# ' + data.cv_no + ' | Project: ' + data.project_code);
     res.json({ success: true, message: 'Record updated successfully.' });

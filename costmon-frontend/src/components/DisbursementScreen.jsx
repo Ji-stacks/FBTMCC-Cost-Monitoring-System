@@ -985,21 +985,28 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     if (isPureStock) {
       finalHeaderData = {
         ...finalHeaderData,
-        payee: '',
-        project_code: '',
-        particulars: '',
-        bank: '',
-        check_no: '',
-        tin: ''
+        payee: null,
+        project_code: null,
+        particulars: null,
+        bank: null,
+        check_no: null,
+        tin: null
       };
     } else {
       if (!headerData.project_code) return;
     }
 
+    ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee'].forEach(key => {
+      if (typeof finalHeaderData[key] === 'string' && finalHeaderData[key].trim() === "") {
+        finalHeaderData[key] = null;
+      }
+    });
+
     if (!finalHeaderData.cv_no && !finalHeaderData.or_inv_no) { setErrorMessage("Kailangan ilagay ang CV# o OR/INV#."); return; }
     if (isDuplicateCV) { setErrorMessage("May kaparehas na CV#! Paki-palitan bago i-save."); return; }
     if (isDuplicateOR) { setErrorMessage("May kaparehas na OR/INV#! Paki-palitan bago i-save."); return; }
-    if (!isVarianceZero) { setErrorMessage("Hindi pwedeng i-save! Paki-check ang Variance. Kailangang pantay ang Target CIB sa Computed CIB."); return; }
+    const stockAllocationValid = isStockAllocationMode && totals.cib_coh > 0 && totals.cib_coh <= targetCib;
+    if (!isVarianceZero && !stockAllocationValid) { setErrorMessage("Hindi pwedeng i-save! Paki-check ang Variance. Kailangang pantay ang Target CIB sa Computed CIB."); return; }
 
     const projectCodes = Array.isArray(finalHeaderData.project_code)
       ? finalHeaderData.project_code
@@ -1025,7 +1032,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
       costingGroups.forEach(group => {
         const groupLines = [...group.constructionLines, ...group.miscLines].filter(
-          line => (line.category && line.category.trim() !== '') || (line.amount && line.amount !== '')
+          line => {
+             const cat = line.category ? line.category.trim() : '';
+             return cat !== '' && !cat.toLowerCase().includes('select');
+          }
         );
 
         groupLines.forEach(line => {
@@ -1072,6 +1082,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         : 0;
       const projGross = Number((projNet + projEwt + projStocksAmount).toFixed(2));
 
+      const isAllocation = isStockAllocationMode && stockAllocationSource;
+
       return {
         id: editingId ? (editingUnderlyingRecords[index]?.id || `new_${index}`) : `new_${index}`,
         ...finalHeaderData,
@@ -1086,13 +1098,15 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         gross_amount: projGross,
         ewt_amount: projEwt,
         net_amount: projNet,
-        stocks_amount: projStocksAmount,
-        stock_description: isAddStocksChecked ? stockDescription.trim() : '',
+        // Stock allocation entries are saved as plain expenses — stocks_amount = 0
+        stocks_amount: isAllocation ? 0 : projStocksAmount,
+        stock_description: (!isAllocation && isAddStocksChecked) ? stockDescription.trim() : '',
         created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
         // Stock Allocation Mode flags
-        ...(isStockAllocationMode && stockAllocationSource ? {
+        ...(isAllocation ? {
           is_stock_allocation: true,
-          source_stock_cv: stockAllocationSource.cv_no
+          source_cv_no: stockAllocationSource.cv_no,
+          allocated_amount: projNet  // actual expense total being drawn from the stock (e.g. 400, not 500)
         } : {})
       };
     });
@@ -2294,21 +2308,36 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         </div>
                       </div>
 
-                      <div className={`p-3 rounded-lg flex items-center justify-between mb-4 border transition-colors ${isVarianceZero ? 'bg-emerald-500/10 border-emerald-500/30 dark:bg-emerald-900/20 dark:border-emerald-800' : 'bg-red-500/10 border-red-500/30 dark:bg-red-900/20 dark:border-red-800'}`}>
-                        <span className={`text-xs font-bold uppercase ${isVarianceZero ? 'text-emerald-400 dark:text-emerald-500' : 'text-red-400 dark:text-red-500'}`}>
-                          {isVarianceZero ? '✓ Balance' : '⚠️ Variance (Short/Over)'}
-                        </span>
-                        <span className={`font-mono font-bold ${isVarianceZero ? 'text-emerald-400 dark:text-emerald-500' : 'text-red-400 dark:text-red-500'}`}>
-                          {(targetCib - totals.cib_coh) > 0 ? '+' : ''}{(targetCib - totals.cib_coh).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
+                      {(() => {
+                        const remaining = targetCib - totals.cib_coh;
+                        const isPartialAllocation = isStockAllocationMode && totals.cib_coh > 0 && remaining >= 0 && !isVarianceZero;
+                        const blockColor = isVarianceZero
+                          ? 'bg-emerald-500/10 border-emerald-500/30 dark:bg-emerald-900/20 dark:border-emerald-800'
+                          : isPartialAllocation
+                            ? 'bg-blue-500/10 border-blue-500/30 dark:bg-blue-900/20 dark:border-blue-800'
+                            : 'bg-red-500/10 border-red-500/30 dark:bg-red-900/20 dark:border-red-800';
+                        const textColor = isVarianceZero
+                          ? 'text-emerald-400 dark:text-emerald-500'
+                          : isPartialAllocation
+                            ? 'text-blue-400 dark:text-blue-400'
+                            : 'text-red-400 dark:text-red-500';
+                        const label = isVarianceZero ? '✓ Balance' : isPartialAllocation ? '📦 Remaining Stock' : '⚠️ Variance (Short/Over)';
+                        return (
+                          <div className={`p-3 rounded-lg flex items-center justify-between mb-4 border transition-colors ${blockColor}`}>
+                            <span className={`text-xs font-bold uppercase ${textColor}`}>{label}</span>
+                            <span className={`font-mono font-bold ${textColor}`}>
+                              {remaining > 0 ? '+' : ''}{remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex flex-col gap-2">
                         <button
                           type="submit"
                           onClick={handleSubmit}
-                          disabled={isDuplicateCV || !isVarianceZero || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT'}
-                          className={`w-full text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${(isDuplicateCV || !isVarianceZero || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT')
+                          disabled={isDuplicateCV || (isStockAllocationMode ? (totals.cib_coh <= 0 || totals.cib_coh > targetCib) : !isVarianceZero) || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT'}
+                          className={`w-full text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${(isDuplicateCV || (isStockAllocationMode ? (totals.cib_coh <= 0 || totals.cib_coh > targetCib) : !isVarianceZero) || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT')
                             ? 'bg-slate-500 dark:bg-slate-700 cursor-not-allowed opacity-50 shadow-none'
                             : 'bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 shadow-blue-900/20 dark:shadow-none'
                             }`}
