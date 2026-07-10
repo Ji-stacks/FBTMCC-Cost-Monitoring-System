@@ -92,6 +92,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   const cameraInputRef = useRef(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [showDraftModal, setShowDraftModal] = useState(false);
+  const [showStockWarning, setShowStockWarning] = useState(false);
 
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
   const [isAddingLine, setIsAddingLine] = useState(false);
@@ -897,13 +898,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       const token = localStorage.getItem('fbtmcc_token');
       const payloads = Array.isArray(disbursementData) ? disbursementData : [disbursementData];
 
-      const promises = payloads.map(data => {
-        const isExisting = typeof data.id === 'number' || (typeof data.id === 'string' && !data.id.startsWith('new_'));
-        const url = isExisting ? `${API_URL}/disbursements/${data.id}` : `${API_URL}/disbursements`;
-        const method = isExisting ? 'PUT' : 'POST';
+      const newPayloads = payloads.filter(data => !(typeof data.id === 'number' || (typeof data.id === 'string' && !data.id.startsWith('new_'))));
+      const existingPayloads = payloads.filter(data => (typeof data.id === 'number' || (typeof data.id === 'string' && !data.id.startsWith('new_'))));
 
-        return fetch(url, {
-          method: method,
+      const promises = existingPayloads.map(data => {
+        return fetch(`${API_URL}/disbursements/${data.id}`, {
+          method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -917,6 +917,25 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
           return res;
         });
       });
+
+      if (newPayloads.length > 0) {
+        promises.push(
+          fetch(`${API_URL}/disbursements`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(newPayloads)
+          }).then(async (res) => {
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || "Hindi ma-save ang data.");
+            }
+            return res;
+          })
+        );
+      }
 
       if (editingId && editingUnderlyingRecords) {
         const payloadIds = payloads.map(p => p.id);
@@ -947,35 +966,76 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     if (e && e.preventDefault) e.preventDefault();
     setErrorMessage('');
 
-    if (!headerData.project_code || !canEdit || totals.totalDebit === 0) return;
-    if (!headerData.cv_no && !headerData.or_inv_no) { setErrorMessage("Kailangan ilagay ang CV# o OR/INV#."); return; }
+    const parsedStocksAmt = isAddStocksChecked ? (parseFloat(String(stocksAmount).replace(/,/g, '')) || 0) : 0;
+    const isPureStock = totals.totalDebit === 0 && parsedStocksAmt > 0;
+
+    if (!canEdit || (totals.totalDebit === 0 && !isPureStock)) return;
+    
+    if (isPureStock) {
+      setShowStockWarning(true);
+      return;
+    }
+
+    proceedWithSubmission(false);
+  };
+
+  const proceedWithSubmission = (isPureStock) => {
+    let finalHeaderData = { ...headerData };
+
+    if (isPureStock) {
+      finalHeaderData = {
+        ...finalHeaderData,
+        payee: null,
+        project_code: null,
+        particulars: null,
+        bank: null,
+        check_no: null,
+        tin: null
+      };
+    } else {
+      if (!headerData.project_code) return;
+    }
+
+    ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee'].forEach(key => {
+      if (typeof finalHeaderData[key] === 'string' && finalHeaderData[key].trim() === "") {
+        finalHeaderData[key] = null;
+      }
+    });
+
+    if (!finalHeaderData.cv_no && !finalHeaderData.or_inv_no) { setErrorMessage("Kailangan ilagay ang CV# o OR/INV#."); return; }
     if (isDuplicateCV) { setErrorMessage("May kaparehas na CV#! Paki-palitan bago i-save."); return; }
     if (isDuplicateOR) { setErrorMessage("May kaparehas na OR/INV#! Paki-palitan bago i-save."); return; }
-    if (!isVarianceZero) { setErrorMessage("Hindi pwedeng i-save! Paki-check ang Variance. Kailangang pantay ang Target CIB sa Computed CIB."); return; }
+    const stockAllocationValid = isStockAllocationMode && totals.cib_coh > 0 && totals.cib_coh <= targetCib;
+    if (!isVarianceZero && !stockAllocationValid) { setErrorMessage("Hindi pwedeng i-save! Paki-check ang Variance. Kailangang pantay ang Target CIB sa Computed CIB."); return; }
 
-    const projectCodes = Array.isArray(headerData.project_code)
-      ? headerData.project_code
-      : (typeof headerData.project_code === 'string' ? headerData.project_code.split(',').map(c => c.trim()).filter(Boolean) : []);
+    const projectCodes = Array.isArray(finalHeaderData.project_code)
+      ? finalHeaderData.project_code
+      : (typeof finalHeaderData.project_code === 'string' ? finalHeaderData.project_code.split(',').map(c => c.trim()).filter(Boolean) : []);
 
-    if (projectCodes.length === 0) {
+    if (!isPureStock && projectCodes.length === 0) {
       setErrorMessage("Kailangan pumili ng Project Code.");
       return;
     }
+
+    const finalProjectCodes = (isPureStock && projectCodes.length === 0) ? [''] : projectCodes;
 
     if (isAddStocksChecked && (!stockDescription || stockDescription.trim() === '')) {
       setErrorMessage("Kailangan maglagay ng Stock Description kapag nag-add ng stocks.");
       return;
     }
 
-    const numProjects = projectCodes.length;
-    const payloads = projectCodes.map((projCode, index) => {
+    const numProjects = finalProjectCodes.length;
+    const payloads = finalProjectCodes.map((projCode, index) => {
       let projectTotalDebit = 0;
       let projectEwt = 0;
       const projectExpenses = [];
 
       costingGroups.forEach(group => {
         const groupLines = [...group.constructionLines, ...group.miscLines].filter(
-          line => (line.category && line.category.trim() !== '') || (line.amount && line.amount !== '')
+          line => {
+             const cat = line.category ? line.category.trim() : '';
+             return cat !== '' && !cat.toLowerCase().includes('select');
+          }
         );
 
         groupLines.forEach(line => {
@@ -1022,26 +1082,31 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         : 0;
       const projGross = Number((projNet + projEwt + projStocksAmount).toFixed(2));
 
+      const isAllocation = isStockAllocationMode && stockAllocationSource;
+
       return {
         id: editingId ? (editingUnderlyingRecords[index]?.id || `new_${index}`) : `new_${index}`,
-        ...headerData,
-        project_code: projCode,
-        target_cib: getSplitVal(headerData.target_cib),
-        input_tax: getSplitVal(headerData.input_tax),
-        output_tax: getSplitVal(headerData.output_tax),
-        accts_pay: getSplitVal(headerData.accts_pay),
-        expenses: projectExpenses,
+        ...finalHeaderData,
+        project_code: projCode || null,
+        payee: finalHeaderData.payee || null,
+        target_cib: getSplitVal(finalHeaderData.target_cib),
+        input_tax: getSplitVal(finalHeaderData.input_tax),
+        output_tax: getSplitVal(finalHeaderData.output_tax),
+        accts_pay: getSplitVal(finalHeaderData.accts_pay),
+        expenses: projectExpenses.map(exp => ({ ...exp, category: exp.category || null })),
         attachments: modalAttachments,
         gross_amount: projGross,
         ewt_amount: projEwt,
         net_amount: projNet,
-        stocks_amount: projStocksAmount,
-        stock_description: isAddStocksChecked ? stockDescription.trim() : '',
+        // Stock allocation entries are saved as plain expenses — stocks_amount = 0
+        stocks_amount: isAllocation ? 0 : projStocksAmount,
+        stock_description: (!isAllocation && isAddStocksChecked) ? stockDescription.trim() : '',
         created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
         // Stock Allocation Mode flags
-        ...(isStockAllocationMode && stockAllocationSource ? {
+        ...(isAllocation ? {
           is_stock_allocation: true,
-          source_stock_cv: stockAllocationSource.cv_no
+          source_cv_no: stockAllocationSource.cv_no,
+          allocated_amount: projNet  // actual expense total being drawn from the stock (e.g. 400, not 500)
         } : {})
       };
     });
@@ -2243,21 +2308,36 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         </div>
                       </div>
 
-                      <div className={`p-3 rounded-lg flex items-center justify-between mb-4 border transition-colors ${isVarianceZero ? 'bg-emerald-500/10 border-emerald-500/30 dark:bg-emerald-900/20 dark:border-emerald-800' : 'bg-red-500/10 border-red-500/30 dark:bg-red-900/20 dark:border-red-800'}`}>
-                        <span className={`text-xs font-bold uppercase ${isVarianceZero ? 'text-emerald-400 dark:text-emerald-500' : 'text-red-400 dark:text-red-500'}`}>
-                          {isVarianceZero ? '✓ Balance' : '⚠️ Variance (Short/Over)'}
-                        </span>
-                        <span className={`font-mono font-bold ${isVarianceZero ? 'text-emerald-400 dark:text-emerald-500' : 'text-red-400 dark:text-red-500'}`}>
-                          {(targetCib - totals.cib_coh) > 0 ? '+' : ''}{(targetCib - totals.cib_coh).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
+                      {(() => {
+                        const remaining = targetCib - totals.cib_coh;
+                        const isPartialAllocation = isStockAllocationMode && totals.cib_coh > 0 && remaining >= 0 && !isVarianceZero;
+                        const blockColor = isVarianceZero
+                          ? 'bg-emerald-500/10 border-emerald-500/30 dark:bg-emerald-900/20 dark:border-emerald-800'
+                          : isPartialAllocation
+                            ? 'bg-blue-500/10 border-blue-500/30 dark:bg-blue-900/20 dark:border-blue-800'
+                            : 'bg-red-500/10 border-red-500/30 dark:bg-red-900/20 dark:border-red-800';
+                        const textColor = isVarianceZero
+                          ? 'text-emerald-400 dark:text-emerald-500'
+                          : isPartialAllocation
+                            ? 'text-blue-400 dark:text-blue-400'
+                            : 'text-red-400 dark:text-red-500';
+                        const label = isVarianceZero ? '✓ Balance' : isPartialAllocation ? '📦 Remaining Stock' : '⚠️ Variance (Short/Over)';
+                        return (
+                          <div className={`p-3 rounded-lg flex items-center justify-between mb-4 border transition-colors ${blockColor}`}>
+                            <span className={`text-xs font-bold uppercase ${textColor}`}>{label}</span>
+                            <span className={`font-mono font-bold ${textColor}`}>
+                              {remaining > 0 ? '+' : ''}{remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex flex-col gap-2">
                         <button
                           type="submit"
                           onClick={handleSubmit}
-                          disabled={isDuplicateCV || !isVarianceZero || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT'}
-                          className={`w-full text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${(isDuplicateCV || !isVarianceZero || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT')
+                          disabled={isDuplicateCV || (isStockAllocationMode ? (totals.cib_coh <= 0 || totals.cib_coh > targetCib) : !isVarianceZero) || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT'}
+                          className={`w-full text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${(isDuplicateCV || (isStockAllocationMode ? (totals.cib_coh <= 0 || totals.cib_coh > targetCib) : !isVarianceZero) || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT')
                             ? 'bg-slate-500 dark:bg-slate-700 cursor-not-allowed opacity-50 shadow-none'
                             : 'bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 shadow-blue-900/20 dark:shadow-none'
                             }`}
@@ -2296,6 +2376,39 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         onRestore={handleRestoreDraft}
         onDiscard={handleDiscardDraft}
       />
+
+      {showStockWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 zoom-in-95 animate-in flex flex-col gap-5">
+            <div className="flex items-center gap-4">
+              <div className="bg-amber-100 dark:bg-amber-900/30 p-3 rounded-full text-amber-600 dark:text-amber-400 shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <h3 className="text-lg font-black text-slate-800 dark:text-white">Pure Stock Entry Warning</h3>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+              Submitting a pure stock entry will invalidate and clear the Project Code, Payee, Particulars, and other voucher details. Only the CV # / OR / INV # and Stock Details will be saved.
+            </p>
+            <div className="flex justify-end gap-3 mt-2">
+              <button
+                onClick={() => setShowStockWarning(false)}
+                className="px-5 py-2.5 rounded-xl font-bold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowStockWarning(false);
+                  proceedWithSubmission(true);
+                }}
+                className="px-5 py-2.5 rounded-xl font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-lg shadow-amber-200 dark:shadow-none transition-all"
+              >
+                Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(isSaving || isLoading) && (
         <LoadingOverlay
