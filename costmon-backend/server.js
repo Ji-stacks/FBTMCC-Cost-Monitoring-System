@@ -621,21 +621,48 @@ app.get('/api/disbursements', authenticateToken, (req, res) => {
 });
 
 app.post('/api/disbursements', authenticateToken, (req, res) => {
-  const data = req.body;
+  const dataList = Array.isArray(req.body) ? req.body : [req.body];
 
   // Backend validation: Compute expected net amount (Gross - EWT - Stocks)
-  const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
-  if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
-    return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
+  for (let data of dataList) {
+    const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
+    if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
+      return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
+    }
   }
 
-  const stmt = db.prepare('INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, bank, check_no, or_inv_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at, costing_type, attachments_json, stocks_amount, stock_description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-  stmt.run(data.id, data.project_code || null, data.date, data.payee || null, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    logActivity(req.user.username, 'CREATE_DISBURSEMENT', 'disbursement', data.id, 'CV# ' + data.cv_no + ' | Project: ' + data.project_code + ' | Amount: ' + data.gross_amount);
-    res.json({ success: true, message: 'Record saved successfully.' });
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    const stmt = db.prepare('INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, bank, check_no, or_inv_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at, costing_type, attachments_json, stocks_amount, stock_description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+
+    let hasError = false;
+    let completed = 0;
+
+    dataList.forEach(data => {
+      if (hasError) return;
+      const newId = Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
+      
+      stmt.run(newId, data.project_code || null, data.date, data.payee || null, data.particulars, data.tin, data.cv_no, data.bank, data.check_no, data.or_inv_no, data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', function (err) {
+        if (hasError) return;
+        if (err) {
+          hasError = true;
+          db.run("ROLLBACK");
+          return res.status(500).json({ error: err.message });
+        }
+        
+        logActivity(req.user.username, 'CREATE_DISBURSEMENT', 'disbursement', newId, 'CV# ' + data.cv_no + ' | Project: ' + data.project_code + ' | Amount: ' + data.gross_amount);
+        
+        completed++;
+        if (completed === dataList.length) {
+          db.run("COMMIT", (commitErr) => {
+            if (commitErr) return res.status(500).json({ error: commitErr.message });
+            res.json({ success: true, message: 'Record(s) saved successfully.' });
+          });
+        }
+      });
+    });
+    stmt.finalize();
   });
-  stmt.finalize();
 });
 
 app.put('/api/disbursements/:id', authenticateToken, (req, res) => {

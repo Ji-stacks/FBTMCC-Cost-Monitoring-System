@@ -898,13 +898,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       const token = localStorage.getItem('fbtmcc_token');
       const payloads = Array.isArray(disbursementData) ? disbursementData : [disbursementData];
 
-      const promises = payloads.map(data => {
-        const isExisting = typeof data.id === 'number' || (typeof data.id === 'string' && !data.id.startsWith('new_'));
-        const url = isExisting ? `${API_URL}/disbursements/${data.id}` : `${API_URL}/disbursements`;
-        const method = isExisting ? 'PUT' : 'POST';
+      const newPayloads = payloads.filter(data => !(typeof data.id === 'number' || (typeof data.id === 'string' && !data.id.startsWith('new_'))));
+      const existingPayloads = payloads.filter(data => (typeof data.id === 'number' || (typeof data.id === 'string' && !data.id.startsWith('new_'))));
 
-        return fetch(url, {
-          method: method,
+      const promises = existingPayloads.map(data => {
+        return fetch(`${API_URL}/disbursements/${data.id}`, {
+          method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -918,6 +917,25 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
           return res;
         });
       });
+
+      if (newPayloads.length > 0) {
+        promises.push(
+          fetch(`${API_URL}/disbursements`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(newPayloads)
+          }).then(async (res) => {
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || "Hindi ma-save ang data.");
+            }
+            return res;
+          })
+        );
+      }
 
       if (editingId && editingUnderlyingRecords) {
         const payloadIds = payloads.map(p => p.id);
