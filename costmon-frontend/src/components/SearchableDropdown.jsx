@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, ChevronDown } from 'lucide-react';
 
-export default function SearchableDropdown({ options, value, onChange, placeholder, hasError, size = 'default' }) {
+export default function SearchableDropdown({ options, value, onChange, placeholder, hasError, size = 'default', disabledOptions = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandUp, setExpandUp] = useState(false);
@@ -102,9 +102,10 @@ export default function SearchableDropdown({ options, value, onChange, placehold
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                // Kunin agad ang pinaka-una sa listahan kapag nag-enter
-                if (filteredOptions.length > 0) {
-                  onChange(filteredOptions[0]);
+                // Kunin agad ang pinaka-una sa listahan kapag nag-enter na HINDI disabled
+                const firstAvailable = filteredOptions.find(opt => !(disabledOptions.includes(opt) && opt !== value));
+                if (firstAvailable) {
+                  onChange(firstAvailable);
                   setIsOpen(false);
                 }
               }
@@ -117,18 +118,28 @@ export default function SearchableDropdown({ options, value, onChange, placehold
         {filteredOptions.length === 0 ? (
           <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">Walang nahanap na kategorya.</div>
         ) : (
-          filteredOptions.map((option) => (
-            <div
-              key={option}
-              className={`p-2.5 text-sm cursor-pointer transition-colors ${value === option ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-semibold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-              onClick={() => {
-                onChange(option);
-                setIsOpen(false);
-              }}
-            >
-              {option}
-            </div>
-          ))
+          filteredOptions.map((option) => {
+            const isDisabled = disabledOptions.includes(option) && option !== value;
+            return (
+              <div
+                key={option}
+                className={`p-2.5 text-sm transition-colors ${
+                  isDisabled
+                    ? 'text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60 line-through'
+                    : value === option
+                      ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-semibold cursor-pointer'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer'
+                }`}
+                onClick={() => {
+                  if (isDisabled) return;
+                  onChange(option);
+                  setIsOpen(false);
+                }}
+              >
+                {option}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
