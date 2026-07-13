@@ -1147,23 +1147,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   };
 
   const handlePasswordConfirm = async () => {
-    if (passwordModal.action === 'update') {
+    if (passwordModal.action === 'update' || passwordModal.action === 'update_group') {
       executeSave(passwordModal.payload);
-    } else if (passwordModal.action === 'update_group') {
-      try {
-        const token = sessionStorage.getItem('fbtmcc_token');
-        const deletePromises = passwordModal.oldIds.map(id =>
-          fetch(`${API_URL}/disbursements/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-        );
-        await Promise.all(deletePromises);
-        executeSave(passwordModal.payload);
-      } catch (error) {
-        console.error(error);
-        alert("Network Error during update.");
-      }
     } else if (passwordModal.action === 'delete_group') {
       executeDeleteGroup(passwordModal.payload);
     }
