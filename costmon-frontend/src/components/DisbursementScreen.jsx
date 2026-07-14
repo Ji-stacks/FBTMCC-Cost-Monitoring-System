@@ -858,9 +858,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         if (!group._seenLinesMap[lineId]) {
           group._seenLinesMap[lineId] = { ...exp, amountNum: rawAmt };
         } else {
-          if (group.targetProject === 'all') {
-            group._seenLinesMap[lineId].amountNum += rawAmt;
-          }
+          // Unconditionally sum identical line items across grouped records
+          group._seenLinesMap[lineId].amountNum += rawAmt;
         }
       });
     });
