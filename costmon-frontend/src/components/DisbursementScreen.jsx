@@ -10,20 +10,7 @@ import DraftFoundModal from './DraftFoundModal';
 import { API_URL } from '../utils/Constants';
 
 const TargetProjectDropdown = ({ value, onChange, disabled, selectedProjects }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const wrapperRef = useRef(null);
-
   const currentValues = Array.isArray(value) ? value : (value ? [value] : ['all']);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   if (disabled) {
     return (
@@ -33,65 +20,28 @@ const TargetProjectDropdown = ({ value, onChange, disabled, selectedProjects }) 
     );
   }
 
-  const getDisplayValue = () => {
-    if (currentValues.includes('all')) return '🌐 For All Projects';
-    if (currentValues.length === 1) return `📁 ${currentValues[0]} only`;
-    return `📁 ${currentValues.length} Projects Selected`;
-  };
+  const options = ['All Projects', ...selectedProjects];
+  const mappedValue = currentValues.includes('all') ? ['All Projects'] : currentValues;
 
-  const toggleSelection = (pc) => {
-    if (pc === 'all') {
+  const handleChange = (val) => {
+    if (val.includes('All Projects') && !mappedValue.includes('All Projects')) {
       onChange(['all']);
+    } else if (val.includes('All Projects') && val.length > 1) {
+      const filtered = val.filter(v => v !== 'All Projects');
+      onChange(filtered);
     } else {
-      let newVals = currentValues.filter(v => v !== 'all');
-      if (newVals.includes(pc)) {
-        newVals = newVals.filter(v => v !== pc);
-        if (newVals.length === 0) newVals = ['all'];
-      } else {
-        newVals.push(pc);
-      }
-      onChange(newVals);
+      onChange(val.length > 0 ? val : ['all']);
     }
   };
 
   return (
-    <div ref={wrapperRef} className="relative">
-      <div
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsOpen(!isOpen); }}
-        className="flex items-center justify-between min-w-[140px] gap-2 text-xs font-bold border border-blue-200 dark:border-blue-700/50 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-600 cursor-pointer transition-all shadow-sm"
-      >
-        <span className="truncate">{getDisplayValue()}</span>
-        <ChevronDown size={14} className={`transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
-      </div>
-
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-full min-w-max bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2">
-          <div
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection('all'); }}
-            className={`px-3 py-2 text-xs flex items-center gap-2 cursor-pointer transition-colors ${currentValues.includes('all') ? 'font-bold bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-          >
-            <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 ${currentValues.includes('all') ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600'}`}>
-              {currentValues.includes('all') && <span className="text-white text-[10px] font-black leading-none">✓</span>}
-            </div>
-            🌐 For All Projects
-          </div>
-          {selectedProjects.map(pc => {
-            const isSelected = currentValues.includes(pc);
-            return (
-              <div
-                key={pc}
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(pc); }}
-                className={`px-3 py-2 text-xs flex items-center gap-2 cursor-pointer transition-colors border-t border-slate-100 dark:border-slate-700/50 ${isSelected ? 'font-bold bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-              >
-                <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600'}`}>
-                  {isSelected && <span className="text-white text-[10px] font-black leading-none">✓</span>}
-                </div>
-                📁 {pc} only
-              </div>
-            );
-          })}
-        </div>
-      )}
+    <div className="w-[280px]">
+      <MultiSelectDropdown
+        options={options}
+        value={mappedValue}
+        onChange={handleChange}
+        placeholder="Select Project(s)..."
+      />
     </div>
   );
 };
