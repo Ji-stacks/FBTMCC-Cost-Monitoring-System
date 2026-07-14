@@ -169,7 +169,13 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   ];
 
   const filteredDisbursements = useMemo(() => {
-    let result = (disbursements || []).filter(d => d.costing_type !== 'additional');
+    let result = (disbursements || []).filter(d => {
+      if (d.costing_type === 'additional') return false;
+      // Filter out Pure Stock entries (purchases placed into inventory without a project)
+      const isPureStock = !d.project_code && parseFloat(d.stocks_amount || 0) > 0;
+      if (isPureStock) return false;
+      return true;
+    });
 
     if (selectedMonths.length > 0 || selectedYears.length > 0) {
       result = result.filter(d => {
