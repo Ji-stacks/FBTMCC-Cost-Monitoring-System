@@ -1079,8 +1079,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         return (index === 0) ? Number((base + remainder).toFixed(2)) : base;
       };
 
-      const projStocksAmount = isAddStocksChecked
-        ? getSplitVal(stocksAmount)
+      const rawStocksAmount = parseFloat(String(stocksAmount).replace(/,/g, '')) || 0;
+      const projStocksAmount = (isAddStocksChecked && index === 0)
+        ? rawStocksAmount
         : 0;
       const projGross = Number((projNet + projEwt + projStocksAmount).toFixed(2));
 
@@ -1102,7 +1103,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         net_amount: projNet,
         // Stock allocation entries are saved as plain expenses — stocks_amount = 0
         stocks_amount: isAllocation ? 0 : projStocksAmount,
-        stock_description: (!isAllocation && isAddStocksChecked) ? stockDescription.trim() : '',
+        stock_description: (!isAllocation && isAddStocksChecked && index === 0) ? stockDescription.trim() : null,
         created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
         // Stock Allocation Mode flags
         ...(isAllocation ? {
