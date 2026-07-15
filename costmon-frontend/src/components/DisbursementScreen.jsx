@@ -121,8 +121,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
   const [costingGroups, setCostingGroups] = useState([makeDefaultGroup(1)]);
   const [isAddStocksChecked, setIsAddStocksChecked] = useState(false);
-  const [stocksAmount, setStocksAmount] = useState('');
-  const [stockDescription, setStockDescription] = useState('');
+  const [stocksList, setStocksList] = useState([{ amount: '', description: '' }]);
 
   // ==========================================
   // 2. SEARCH, FILTER & ZOOM LOGIC
@@ -485,10 +484,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       });
     });
 
-    const parsedStocksAmount = isAddStocksChecked ? (parseFloat(String(stocksAmount).replace(/,/g, '')) || 0) : 0;
-    const cib_coh = totalDebit + ewtPayable + parsedStocksAmount;
-    return { totalDebit, ewtPayable, cib_coh, stocksAmountVal: parsedStocksAmount };
-  }, [costingGroups, isAddStocksChecked, stocksAmount]);
+    const totalStocks = isAddStocksChecked ? stocksList.reduce((sum, stock) => sum + (parseFloat(String(stock.amount).replace(/,/g, '')) || 0), 0) : 0;
+    const cib_coh = totalDebit + ewtPayable + totalStocks;
+    return { totalDebit, ewtPayable, cib_coh, stocksAmountVal: totalStocks };
+  }, [costingGroups, isAddStocksChecked, stocksList]);
 
   const targetCib = parseFloat(String(headerData.target_cib).replace(/,/g, '')) || 0;
   const isVarianceZero = Math.abs(targetCib - totals.cib_coh) < 0.01;
@@ -550,8 +549,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     setEditingId(null);
     setEditingUnderlyingRecords([]);
     setIsAddStocksChecked(false);
-    setStocksAmount('');
-    setStockDescription('');
+    setStocksList([{ amount: '', description: '' }]);
     setIsStockAllocationMode(false);
     setStockAllocationSource(null);
   };
@@ -566,7 +564,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     return JSON.stringify(headerData) !== initialFormState.headerData ||
       JSON.stringify(costingGroups) !== initialFormState.costingGroups ||
       isAddStocksChecked !== initialFormState.isAddStocksChecked ||
-      stocksAmount !== initialFormState.stocksAmount;
+      JSON.stringify(stocksList) !== JSON.stringify(initialFormState.stocksList);
   };
 
   const handleCloseRequest = () => {
@@ -587,8 +585,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       headerData: JSON.stringify(initHeader),
       costingGroups: JSON.stringify(initGroups),
       isAddStocksChecked: false,
-      stocksAmount: '',
-      stockDescription: ''
+      stocksList: [{ amount: '', description: '' }]
     });
   };
 
@@ -721,7 +718,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       headerData: JSON.stringify(initHeader),
       costingGroups: JSON.stringify(initGroups),
       isAddStocksChecked: false,
-      stocksAmount: ''
+      stocksList: [{ amount: '', description: '' }]
     });
 
     setIsModalOpen(true);
@@ -742,8 +739,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         headerData: JSON.stringify(initHeader),
         costingGroups: JSON.stringify(initGroups),
         isAddStocksChecked: false,
-        stocksAmount: '',
-        stockDescription: ''
+        stocksList: [{ amount: '', description: '' }]
       });
       setIsModalOpen(true);
     }
@@ -859,27 +855,28 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     setCostingGroups(parsedGroups);
     setModalAttachments(d.attachments || []);
 
-    // Stock description is only stored on the first DB sub-row (null for others).
-    // Always search underlying_records to find the record that actually has it.
-    const stockRecord = (d.underlying_records || [d]).find(r => r.stock_description && r.stock_description.trim() !== '');
-    const resolvedStockDescription = stockRecord ? (stockRecord.stock_description || '') : (d.stock_description || '');
+    const stockRecords = (d.underlying_records || [d]).filter(r => (parseFloat(r.stocks_amount) || 0) > 0);
 
-    if (d.stocks_amount && d.stocks_amount > 0) {
+    if (stockRecords.length > 0) {
       setIsAddStocksChecked(true);
-      setStocksAmount(String(d.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
-      setStockDescription(resolvedStockDescription);
+      const parsedStocksList = stockRecords.map(r => ({
+        amount: String(r.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ','),
+        description: r.stock_description || ''
+      }));
+      setStocksList(parsedStocksList);
     } else {
       setIsAddStocksChecked(false);
-      setStocksAmount('');
-      setStockDescription('');
+      setStocksList([{ amount: '', description: '' }]);
     }
 
     setInitialFormState({
       headerData: JSON.stringify(newHeader),
       costingGroups: JSON.stringify(parsedGroups),
-      isAddStocksChecked: d.stocks_amount > 0,
-      stocksAmount: d.stocks_amount > 0 ? String(d.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '',
-      stockDescription: d.stock_description || ''
+      isAddStocksChecked: stockRecords.length > 0,
+      stocksList: stockRecords.length > 0 ? stockRecords.map(r => ({
+        amount: String(r.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ','),
+        description: r.stock_description || ''
+      })) : [{ amount: '', description: '' }]
     });
 
     setErrorMessage('');
@@ -960,7 +957,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     if (e && e.preventDefault) e.preventDefault();
     setErrorMessage('');
 
-    const parsedStocksAmt = isAddStocksChecked ? (parseFloat(String(stocksAmount).replace(/,/g, '')) || 0) : 0;
+    const parsedStocksAmt = totals.stocksAmountVal || 0;
     const isPureStock = totals.totalDebit === 0 && parsedStocksAmt > 0;
 
     if (!canEdit || (totals.totalDebit === 0 && !isPureStock)) return;
@@ -1013,9 +1010,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     const finalProjectCodes = (isPureStock && projectCodes.length === 0) ? [''] : projectCodes;
 
-    if (isAddStocksChecked && (!stockDescription || stockDescription.trim() === '')) {
-      setErrorMessage("Kailangan maglagay ng Stock Description kapag nag-add ng stocks.");
-      return;
+    if (isAddStocksChecked) {
+      const hasInvalidStock = stocksList.some(s => !s.description || s.description.trim() === '');
+      if (hasInvalidStock) {
+        setErrorMessage("Kailangan maglagay ng Stock Description kapag nag-add ng stocks.");
+        return;
+      }
     }
 
     const numProjects = finalProjectCodes.length;
@@ -1077,18 +1077,14 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         return (index === 0) ? Number((base + remainder).toFixed(2)) : base;
       };
 
-      const rawStocksAmount = parseFloat(String(stocksAmount).replace(/,/g, '')) || 0;
-      const projStocksAmount = (isAddStocksChecked && index === 0)
-        ? rawStocksAmount
-        : 0;
-      const projGross = Number((projNet + projEwt + projStocksAmount).toFixed(2));
+      const projGross = Number((projNet + projEwt).toFixed(2));
 
       const isCreditCard = (projCode || '').toLowerCase() === 'credit card';
       // accts_pay is a metadata field stored separately. net_amount must always satisfy
       // the backend formula: gross_amount - ewt_amount - stocks_amount
       const explicitAcctsPay = isCreditCard ? projNet : 0;
       // net_amount = gross - ewt - stocks (the backend validation formula)
-      const backendNet = Number((projGross - projEwt - projStocksAmount).toFixed(2));
+      const backendNet = Number((projGross - projEwt).toFixed(2));
 
       const isAllocation = isStockAllocationMode && stockAllocationSource;
 
@@ -1123,9 +1119,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         gross_amount: projGross,
         ewt_amount: projEwt,
         net_amount: backendNet,
-        // Stock allocation entries are saved as plain expenses — stocks_amount = 0
-        stocks_amount: isAllocation ? 0 : projStocksAmount,
-        stock_description: (!isAllocation && isAddStocksChecked && index === 0) ? stockDescription.trim() : null,
+        stocks_amount: 0,
+        stock_description: null,
         created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
         // Stock Allocation Mode flags
         ...(isAllocation ? {
@@ -1135,6 +1130,33 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         } : {})
       };
     });
+
+    if (isAddStocksChecked && !isStockAllocationMode) {
+      stocksList.forEach((stock, sIdx) => {
+        const amt = parseFloat(String(stock.amount).replace(/,/g, '')) || 0;
+        if (amt > 0) {
+          payloads.push({
+            id: `new_stock_${sIdx}`,
+            ...finalHeaderData,
+            project_code: null,
+            payee: finalHeaderData.payee || null,
+            target_cib: 0,
+            input_tax: 0,
+            output_tax: 0,
+            accts_pay: 0,
+            expenses: [], // Pure stock, no project expenses
+            attachments: modalAttachments,
+            gross_amount: amt,
+            ewt_amount: 0,
+            net_amount: 0, // gross(amt) - ewt(0) - stocks(amt) = 0
+            stocks_amount: amt,
+            stock_description: stock.description.trim() || null,
+            created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
+            costing_type: 'normal'
+          });
+        }
+      });
+    }
 
     if (editingId) {
       setPasswordModal({
@@ -2064,7 +2086,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                               checked={isAddStocksChecked}
                               onChange={(e) => {
                                 setIsAddStocksChecked(e.target.checked);
-                                if (!e.target.checked) setStocksAmount('');
+                                if (!e.target.checked) setStocksList([{ amount: '', description: '' }]);
                               }}
                             />
                             <label htmlFor="add-stocks-checkbox" className="text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
@@ -2082,41 +2104,71 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                             <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
                               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">4. INPUT STOCKS <span className="text-red-500">*</span></h3>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Stock Amount (₱) <span className="text-red-500">*</span></label>
-                                <div className="relative w-full">
-                                  <span className="absolute left-3 top-2.5 text-slate-400 dark:text-slate-500 text-sm font-medium">₱</span>
-                                  <input
-                                    type="text"
-                                    placeholder="0.00"
-                                    className="w-full pl-7 p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
-                                    value={stocksAmount}
-                                    onChange={(e) => {
-                                      let val = e.target.value.replace(/[^0-9.]/g, '');
-                                      const parts = val.split('.');
-                                      if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
-                                      if (val) {
-                                        const p2 = val.split('.');
-                                        p2[0] = p2[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                                        val = p2.join('.');
-                                      }
-                                      setStocksAmount(val);
+                            <div className="space-y-4">
+                              {stocksList.map((stock, sIdx) => (
+                                <div key={sIdx} className="grid grid-cols-[1fr_1fr_auto] gap-4 items-end">
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Stock Amount (₱) <span className="text-red-500">*</span></label>
+                                    <div className="relative w-full">
+                                      <span className="absolute left-3 top-2.5 text-slate-400 dark:text-slate-500 text-sm font-medium">₱</span>
+                                      <input
+                                        type="text"
+                                        placeholder="0.00"
+                                        className="w-full pl-7 p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                                        value={stock.amount}
+                                        onChange={(e) => {
+                                          let val = e.target.value.replace(/[^0-9.]/g, '');
+                                          const parts = val.split('.');
+                                          if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                                          if (val) {
+                                            const p2 = val.split('.');
+                                            p2[0] = p2[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                            val = p2.join('.');
+                                          }
+                                          const newList = [...stocksList];
+                                          newList[sIdx].amount = val;
+                                          setStocksList(newList);
+                                        }}
+                                        required
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Stock Description / Item Name <span className="text-red-500">*</span></label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g., Cement, Rebars..."
+                                      className="w-full p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors uppercase"
+                                      value={stock.description}
+                                      onChange={(e) => {
+                                        const newList = [...stocksList];
+                                        newList[sIdx].description = e.target.value;
+                                        setStocksList(newList);
+                                      }}
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newList = [...stocksList];
+                                      newList.splice(sIdx, 1);
+                                      setStocksList(newList);
                                     }}
-                                    required
-                                  />
+                                    disabled={stocksList.length === 1}
+                                    className="p-2.5 mb-[1px] bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-red-100 dark:border-red-800/30 flex items-center justify-center"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
                                 </div>
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Stock Description / Item Name <span className="text-red-500">*</span></label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g., Cement, Rebars..."
-                                  className="w-full p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors uppercase"
-                                  value={stockDescription}
-                                  onChange={(e) => setStockDescription(e.target.value)}
-                                />
-                              </div>
+                              ))}
+                              
+                              <button
+                                type="button"
+                                onClick={() => setStocksList([...stocksList, { amount: '', description: '' }])}
+                                className="w-full py-2.5 border-2 border-dashed border-blue-200 dark:border-blue-800/50 rounded-lg text-blue-600 dark:text-blue-400 text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+                              >
+                                <Plus size={16} /> ADD ANOTHER STOCK ITEM
+                              </button>
                             </div>
                           </div>
                         )}
@@ -2288,7 +2340,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         {isAddStocksChecked && (
                           <div className="flex justify-between items-center text-blue-300 dark:text-blue-400 text-sm">
                             <span>Add: Stocks Amount</span>
-                            <span className="font-mono text-white">+ ₱ {parseFloat(String(stocksAmount).replace(/,/g, '')) ? parseFloat(String(stocksAmount).replace(/,/g, '')).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}</span>
+                            <span className="font-mono text-white">+ ₱ {totals.stocksAmountVal ? totals.stocksAmountVal.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00'}</span>
                           </div>
                         )}
                         {headerData.input_tax && (
