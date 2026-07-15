@@ -265,15 +265,25 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     filteredDisbursements.forEach(d => {
       const key = getKey(d);
+
+      // Apply the same Credit Card redistribution used in ledgerTotals:
+      // If this sub-row belongs to a Credit Card project, its net_amount
+      // is an ACCTS PAY disbursement (not CIB), so move it accordingly.
+      const isCreditCard = d.project_code?.toLowerCase() === 'credit card';
+      const rawNet = parseFloat(d.net_amount) || 0;
+      const rawAcctsPay = parseFloat(d.accts_pay) || 0;
+      const effectiveNet = isCreditCard ? 0 : rawNet;
+      const effectiveAcctsPay = isCreditCard ? rawAcctsPay + rawNet : rawAcctsPay;
+
       if (!groups[key]) {
         groups[key] = {
           ...d,
           project_code: [d.project_code],
           underlying_records: [d],
           gross_amount: parseFloat(d.gross_amount) || 0,
-          net_amount: parseFloat(d.net_amount) || 0,
+          net_amount: effectiveNet,
           ewt_amount: parseFloat(d.ewt_amount) || 0,
-          accts_pay: parseFloat(d.accts_pay) || 0,
+          accts_pay: effectiveAcctsPay,
           target_cib: parseFloat(d.target_cib) || 0,
           input_tax: parseFloat(d.input_tax) || 0,
           output_tax: parseFloat(d.output_tax) || 0,
@@ -288,9 +298,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
           group.project_code.push(d.project_code);
         }
         group.gross_amount += parseFloat(d.gross_amount) || 0;
-        group.net_amount += parseFloat(d.net_amount) || 0;
+        group.net_amount += effectiveNet;
         group.ewt_amount += parseFloat(d.ewt_amount) || 0;
-        group.accts_pay += parseFloat(d.accts_pay) || 0;
+        group.accts_pay += effectiveAcctsPay;
         group.target_cib += parseFloat(d.target_cib) || 0;
         group.input_tax += parseFloat(d.input_tax) || 0;
         group.output_tax += parseFloat(d.output_tax) || 0;
@@ -1557,9 +1567,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right font-mono font-black text-slate-900 dark:text-white border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">₱{(d.gross_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                    <td className="px-6 py-4 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/10 border-r border-slate-400 dark:border-slate-600 group-hover:bg-emerald-100/30 dark:group-hover:bg-emerald-900/30">₱{((Array.isArray(d.project_code) ? d.project_code.some(pc => pc?.toLowerCase() === 'credit card') : d.project_code?.toLowerCase() === 'credit card') ? 0 : (d.net_amount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td className="px-6 py-4 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/10 border-r border-slate-400 dark:border-slate-600 group-hover:bg-emerald-100/30 dark:group-hover:bg-emerald-900/30">₱{(d.net_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     {isAcctsPayVisible && (
-                      <td className="px-6 py-4 text-right font-mono font-black text-amber-700 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10 border-r border-slate-400 dark:border-slate-600 group-hover:bg-amber-100/30 dark:group-hover:bg-amber-900/30">₱{((parseFloat(d.accts_pay) || 0) + ((Array.isArray(d.project_code) ? d.project_code.some(pc => pc?.toLowerCase() === 'credit card') : d.project_code?.toLowerCase() === 'credit card') ? (parseFloat(d.net_amount) || 0) : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 text-right font-mono font-black text-amber-700 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10 border-r border-slate-400 dark:border-slate-600 group-hover:bg-amber-100/30 dark:group-hover:bg-amber-900/30">₱{(parseFloat(d.accts_pay) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     )}
                     {isEwtVisible && (
                       <td className="px-6 py-4 text-right font-mono font-black text-rose-600 dark:text-rose-400 bg-rose-50/20 dark:bg-rose-900/10 border-r border-slate-400 dark:border-slate-600 group-hover:bg-rose-100/20 dark:group-hover:bg-rose-900/30">₱{(d.ewt_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
