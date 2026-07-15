@@ -438,7 +438,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       accts_pay += acctsPay;
     });
 
-    return { dr, cr, diff: dr - cr, ewt, cib, accts_pay };
+    const adjustedTotalCredit = cr - accts_pay;
+    return { dr, cr: adjustedTotalCredit, diff: dr - cr, ewt, cib, accts_pay };
   }, [filteredDisbursements]);
 
   // ==========================================
@@ -1315,7 +1316,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
             textClass="text-blue-600 dark:text-blue-400"
           />
           <HealthCard
-            title="Total of Credit (Net+Tax)"
+            title="TOTAL OF CREDIT (CIB)"
             amount={ledgerTotals.cr}
             colorClass="bg-emerald-600 dark:bg-emerald-500"
             textClass="text-emerald-600 dark:text-emerald-400"
