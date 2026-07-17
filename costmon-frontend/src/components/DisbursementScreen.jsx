@@ -70,6 +70,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [showStockWarning, setShowStockWarning] = useState(false);
+  const [isMonitoringOnly, setIsMonitoringOnly] = useState(false);
 
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
   const [isAddingLine, setIsAddingLine] = useState(false);
@@ -429,6 +430,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     let stocks = 0;
 
     filteredDisbursements.forEach(d => {
+      if (d.is_monitoring_only) return;
       const inputTax = parseFloat(d.input_tax) || 0;
       const outputTax = parseFloat(d.output_tax) || 0;
 
@@ -557,6 +559,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     setEditingUnderlyingRecords([]);
     setIsAddStocksChecked(false);
     setStocksList([{ amount: '', description: '' }]);
+    setIsMonitoringOnly(false);
     setIsStockAllocationMode(false);
     setStockAllocationSource(null);
   };
@@ -571,7 +574,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     return JSON.stringify(headerData) !== initialFormState.headerData ||
       JSON.stringify(costingGroups) !== initialFormState.costingGroups ||
       isAddStocksChecked !== initialFormState.isAddStocksChecked ||
-      JSON.stringify(stocksList) !== JSON.stringify(initialFormState.stocksList);
+      JSON.stringify(stocksList) !== JSON.stringify(initialFormState.stocksList) ||
+      isMonitoringOnly !== initialFormState.isMonitoringOnly;
   };
 
   const handleCloseRequest = () => {
@@ -592,7 +596,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       headerData: JSON.stringify(initHeader),
       costingGroups: JSON.stringify(initGroups),
       isAddStocksChecked: false,
-      stocksList: [{ amount: '', description: '' }]
+      stocksList: [{ amount: '', description: '' }],
+      isMonitoringOnly: false
     });
   };
 
@@ -666,7 +671,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     localStorage.setItem('disbursement_draft', JSON.stringify({
       headerData,
       costingGroups,
-      editingId
+      editingId,
+      isMonitoringOnly
     }));
     setShowUnsavedModal(false);
     closeAndResetModal();
@@ -684,6 +690,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       setHeaderData(draft.headerData);
 
       // Support both new costingGroups format and old constructionLines/miscLines format
+      setIsMonitoringOnly(draft.isMonitoringOnly || false);
       if (draft.costingGroups) {
         setCostingGroups(draft.costingGroups);
       } else {
@@ -725,7 +732,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       headerData: JSON.stringify(initHeader),
       costingGroups: JSON.stringify(initGroups),
       isAddStocksChecked: false,
-      stocksList: [{ amount: '', description: '' }]
+      stocksList: [{ amount: '', description: '' }],
+      isMonitoringOnly: false
     });
 
     setIsModalOpen(true);
@@ -874,6 +882,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     setCostingGroups(parsedGroups);
     setModalAttachments(d.attachments || []);
+    setIsMonitoringOnly(Boolean(fullUnderlyingRecords[0]?.is_monitoring_only));
 
     const stockRecords = fullUnderlyingRecords.filter(r => (parseFloat(r.stocks_amount) || 0) > 0);
 
@@ -896,7 +905,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       stocksList: stockRecords.length > 0 ? stockRecords.map(r => ({
         amount: String(r.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ','),
         description: r.stock_description || ''
-      })) : [{ amount: '', description: '' }]
+      })) : [{ amount: '', description: '' }],
+      isMonitoringOnly: Boolean(fullUnderlyingRecords[0]?.is_monitoring_only)
     });
 
     setErrorMessage('');
@@ -977,6 +987,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     if (e && e.preventDefault) e.preventDefault();
     setErrorMessage('');
 
+    // --- MONITORING DRAFT MODE: bypass all field & balance checks ---
+    if (isMonitoringOnly) {
+      proceedWithSubmission(false, true);
+      return;
+    }
+
     const parsedStocksAmt = totals.stocksAmountVal || 0;
     const isPureStock = totals.totalDebit === 0 && parsedStocksAmt > 0;
 
@@ -990,8 +1006,48 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     proceedWithSubmission(false);
   };
 
-  const proceedWithSubmission = (isPureStock) => {
+  const proceedWithSubmission = (isPureStock, isDraftMode = false) => {
     let finalHeaderData = { ...headerData };
+
+    if (isDraftMode) {
+      // In monitoring/draft mode — nullify empty strings but skip all required-field checks
+      ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee', 'cv_no'].forEach(key => {
+        if (typeof finalHeaderData[key] === 'string' && finalHeaderData[key].trim() === "") {
+          finalHeaderData[key] = null;
+        }
+      });
+      const projectCodes = Array.isArray(finalHeaderData.project_code)
+        ? finalHeaderData.project_code
+        : (typeof finalHeaderData.project_code === 'string' ? finalHeaderData.project_code.split(',').filter(Boolean) : []);
+      // Use placeholder project if none selected so multi-project split still works
+      const finalProjectCodes = projectCodes.length > 0 ? projectCodes : [''];
+      const numProjects = Math.max(finalProjectCodes.length, 1);
+      const payloads = finalProjectCodes.map((projCode, index) => ({
+        id: editingId ? (editingUnderlyingRecords[index]?.id || `new_${index}`) : `new_${index}`,
+        ...finalHeaderData,
+        project_code: projCode || null,
+        target_cib: parseFloat(String(finalHeaderData.target_cib || '0').replace(/,/g, '')) || 0,
+        input_tax: parseFloat(String(finalHeaderData.input_tax || '0').replace(/,/g, '')) || 0,
+        output_tax: parseFloat(String(finalHeaderData.output_tax || '0').replace(/,/g, '')) || 0,
+        accts_pay: 0,
+        expenses: [],
+        attachments: modalAttachments,
+        gross_amount: 0,
+        ewt_amount: 0,
+        net_amount: 0,
+        stocks_amount: 0,
+        stock_description: null,
+        created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
+        costing_type: finalHeaderData.costing_type || 'normal',
+        is_monitoring_only: true
+      }));
+      if (editingId) {
+        setPasswordModal({ isOpen: true, action: 'update_group', payload: payloads, oldIds: editingUnderlyingRecords.map(r => r.id) });
+      } else {
+        executeSave(payloads);
+      }
+      return;
+    }
 
     if (isPureStock) {
       finalHeaderData = {
@@ -1142,6 +1198,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         stocks_amount: 0,
         stock_description: null,
         created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
+        is_monitoring_only: isMonitoringOnly,
         // Stock Allocation Mode flags
         ...(isAllocation ? {
           is_stock_allocation: true,
@@ -1172,7 +1229,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
             stocks_amount: amt,
             stock_description: stock.description.trim() || null,
             created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
-            costing_type: 'normal'
+            costing_type: 'normal',
+            is_monitoring_only: isMonitoringOnly
           });
         }
       });
@@ -1625,7 +1683,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                   >
                     <td className="px-6 py-4 font-black text-slate-600 dark:text-slate-300 sticky left-0 z-10 bg-white dark:bg-slate-900 group-even:bg-slate-50 dark:group-even:bg-slate-800 group-hover:bg-blue-100/50 dark:group-hover:bg-blue-900/30 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">{d.date}</td>
                     <td className="px-6 py-4 font-black text-slate-800 dark:text-slate-200 border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.payee}</td>
-                    <td className="px-6 py-4 font-black text-blue-700 dark:text-blue-400 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.cv_no ? `#${d.cv_no}` : '-'}</td>
+                    <td className="px-6 py-4 font-black text-blue-700 dark:text-blue-400 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">
+                      <div className="flex flex-col items-center gap-1">
+                        <span>{d.cv_no ? `#${d.cv_no}` : '-'}</span>
+                        {d.is_monitoring_only ? <span className="text-[9px] bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full uppercase tracking-wider font-bold">Monitoring</span> : null}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 font-black text-indigo-700 dark:text-indigo-400 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.or_inv_no ? `#${d.or_inv_no}` : '-'}</td>
                     <td className="px-6 py-4 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">
                       <div className="flex flex-col items-center gap-1">
@@ -1733,27 +1796,76 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
       {isModalOpen && canEdit && !postSavePrompt && (
         <div className="fixed inset-0 z-50 flex justify-center items-start pt-6 pb-6 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm px-4 overflow-hidden transition-colors duration-300">
-          <div className="bg-slate-50 dark:bg-slate-900 w-full max-w-6xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-full border border-slate-200 dark:border-slate-800">
+          <div className={`w-full max-w-6xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-full transition-all duration-300 ${
+            isMonitoringOnly
+              ? 'bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-400 dark:border-amber-600 shadow-amber-300/30 dark:shadow-amber-900/30'
+              : 'bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800'
+          }`}>
 
-            <div className="bg-white dark:bg-slate-800 px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0 transition-colors duration-300">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+            {/* MODAL HEADER */}
+            <div className={`px-6 py-4 border-b flex justify-between items-center shrink-0 transition-all duration-300 ${
+              isMonitoringOnly
+                ? 'bg-amber-500 dark:bg-amber-700 border-amber-600 dark:border-amber-800'
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+            }`}>
+              <div className="flex items-center gap-3 flex-1">
+                <div className={`p-2 rounded-lg ${
+                  isMonitoringOnly
+                    ? 'bg-amber-400/40 dark:bg-amber-600/40 text-white'
+                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                }`}>
                   <FileText size={20} />
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
-                    {isStockAllocationMode ? 'Stock Allocation Entry' : editingId ? 'Edit Disbursement Voucher' : 'Disbursement Voucher Entry'}
-                  </h2>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs">
-                    {isStockAllocationMode
-                      ? `Allocating stock from CV# ${stockAllocationSource?.cv_no} — categorize where this stock will be used.`
-                      : editingId ? 'Update the fund details and save.' : 'Complete all required fund details below.'}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className={`text-xl font-bold leading-tight ${
+                      isMonitoringOnly ? 'text-white' : 'text-slate-800 dark:text-white'
+                    }`}>
+                      {isStockAllocationMode ? 'Stock Allocation Entry' : editingId ? 'Edit Disbursement Voucher' : 'Disbursement Voucher Entry'}
+                    </h2>
+                    {isMonitoringOnly && (
+                      <span className="text-[10px] font-black bg-white/20 text-white border border-white/30 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">
+                        ⚠ MONITORING DRAFT MODE
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-xs mt-0.5 ${
+                    isMonitoringOnly ? 'text-amber-100 dark:text-amber-200' : 'text-slate-500 dark:text-slate-400'
+                  }`}>
+                    {isMonitoringOnly
+                      ? 'Draft entry — amounts excluded from totals. All fields are optional.'
+                      : isStockAllocationMode
+                        ? `Allocating stock from CV# ${stockAllocationSource?.cv_no} — categorize where this stock will be used.`
+                        : editingId ? 'Update the fund details and save.' : 'Complete all required fund details below.'}
                   </p>
                 </div>
               </div>
-              <button onClick={handleCloseRequest} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 dark:hover:text-red-400 text-slate-400 dark:text-slate-500 rounded-full transition-colors">
-                <X size={24} />
-              </button>
+
+              {/* MONITORING TOGGLE in header */}
+              <div className="flex items-center gap-4 shrink-0 ml-4">
+                <button
+                  type="button"
+                  onClick={() => setIsMonitoringOnly(v => !v)}
+                  title="Toggle Monitoring Draft Mode"
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-200 border-2 select-none ${
+                    isMonitoringOnly
+                      ? 'bg-white text-amber-700 border-white shadow-lg shadow-amber-900/20'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400'
+                  }`}
+                >
+                  <span className={`w-3 h-3 rounded-full transition-colors duration-200 ${
+                    isMonitoringOnly ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-500'
+                  }`} />
+                  For Monitoring Only
+                </button>
+                <button onClick={handleCloseRequest} className={`p-2 rounded-full transition-colors ${
+                  isMonitoringOnly
+                    ? 'hover:bg-amber-600 dark:hover:bg-amber-800 text-white/80 hover:text-white'
+                    : 'hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 dark:hover:text-red-400 text-slate-400 dark:text-slate-500'
+                }`}>
+                  <X size={24} />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
@@ -1786,9 +1898,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Payee <span className="text-red-500">*</span></label>
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Payee {!isMonitoringOnly && <span className="text-red-500">*</span>}</label>
                       <input type="text" name="payee" placeholder="Name of Payee" className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none font-medium text-slate-800 dark:text-white transition-colors"
-                        value={headerData.payee} onChange={handleHeaderChange} required />
+                        value={headerData.payee} onChange={handleHeaderChange} required={!isMonitoringOnly} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Project Code (#) <span className="text-red-500">*</span></label>
@@ -1800,9 +1912,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Date <span className="text-red-500">*</span></label>
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Date {!isMonitoringOnly && <span className="text-red-500">*</span>}</label>
                       <input type="date" name="date" className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
-                        value={headerData.date} onChange={handleHeaderChange} required />
+                        value={headerData.date} onChange={handleHeaderChange} required={!isMonitoringOnly} />
                     </div>
                     <div className="space-y-1">
                       <label className={`text-xs font-semibold flex items-center justify-between ${isStockAllocationMode ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
@@ -1833,9 +1945,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                     </div>
 
                     <div className="space-y-1 md:col-span-2">
-                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Particulars (Description) <span className="text-red-500">*</span></label>
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Particulars (Description) {!isMonitoringOnly && <span className="text-red-500">*</span>}</label>
                       <input type="text" name="particulars" placeholder="Details..." className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
-                        value={headerData.particulars} onChange={handleHeaderChange} required />
+                        value={headerData.particulars} onChange={handleHeaderChange} required={!isMonitoringOnly} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">TIN</label>
@@ -1874,23 +1986,35 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         value={headerData.check_no} onChange={handleHeaderChange} />
                     </div>
 
-                    <div className={`space-y-1 p-2 -mt-2 -mb-2 rounded-md border flex flex-col justify-center shadow-inner transition-colors duration-300 ${isStockAllocationMode
-                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-                      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800'
+                    <div className={`space-y-1 p-2 -mt-2 -mb-2 rounded-md border flex flex-col justify-center shadow-inner transition-colors duration-300 ${
+                      isStockAllocationMode
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                        : isMonitoringOnly
+                          ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'
+                          : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800'
+                    }`}>
+                      <label className={`text-xs font-bold uppercase flex items-center justify-between ${
+                        isStockAllocationMode ? 'text-emerald-800 dark:text-emerald-300'
+                        : isMonitoringOnly ? 'text-amber-800 dark:text-amber-300'
+                        : 'text-blue-800 dark:text-blue-300'
                       }`}>
-                      <label className={`text-xs font-bold uppercase flex items-center justify-between ${isStockAllocationMode ? 'text-emerald-800 dark:text-emerald-300' : 'text-blue-800 dark:text-blue-300'
-                        }`}>
-                        <span>Target CIB/COH (₱) <span className="text-red-500">*</span></span>
+                        <span>Target CIB/COH (₱) {!isMonitoringOnly && <span className="text-red-500">*</span>}</span>
                         {isStockAllocationMode && (
                           <span className="text-[9px] font-black bg-emerald-600 text-white px-1.5 py-0.5 rounded uppercase tracking-wider">LOCKED</span>
+                        )}
+                        {isMonitoringOnly && (
+                          <span className="text-[9px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded uppercase tracking-wider">OPTIONAL</span>
                         )}
                       </label>
                       <input type="text" name="target_cib" placeholder="0.00"
                         readOnly={isStockAllocationMode}
-                        className={`w-full p-1.5 border rounded-md text-sm focus:ring-2 outline-none font-black transition-colors ${isStockAllocationMode
-                          ? 'border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 bg-emerald-50 dark:bg-emerald-950/50 focus:ring-emerald-400 cursor-not-allowed'
-                          : 'border-blue-200 dark:border-blue-700 text-blue-900 dark:text-blue-100 bg-white dark:bg-slate-800 focus:ring-blue-500'
-                          }`}
+                        className={`w-full p-1.5 border rounded-md text-sm focus:ring-2 outline-none font-black transition-colors ${
+                          isStockAllocationMode
+                            ? 'border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 bg-emerald-50 dark:bg-emerald-950/50 focus:ring-emerald-400 cursor-not-allowed'
+                            : isMonitoringOnly
+                              ? 'border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 bg-white dark:bg-slate-800 focus:ring-amber-400'
+                              : 'border-blue-200 dark:border-blue-700 text-blue-900 dark:text-blue-100 bg-white dark:bg-slate-800 focus:ring-blue-500'
+                        }`}
                         value={headerData.target_cib} onChange={(e) => {
                           if (isStockAllocationMode) return;
                           let val = e.target.value.replace(/[^0-9.]/g, '');
@@ -1902,7 +2026,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                             val = p2.join('.');
                           }
                           handleHeaderChange({ target: { name: 'target_cib', value: val } });
-                        }} required />
+                        }} required={!isMonitoringOnly} />
                     </div>
 
                     <div className="space-y-1 md:col-span-1 flex items-end pb-1">
@@ -2420,16 +2544,34 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       })()}
 
                       <div className="flex flex-col gap-2">
+                        {isMonitoringOnly && (
+                          <div className="flex items-center gap-2 p-2.5 bg-amber-500/20 rounded-lg border border-amber-400/50">
+                            <span className="text-amber-400 text-sm">⚠</span>
+                            <span className="text-xs font-bold text-amber-300 leading-snug">
+                              Draft mode — amounts will NOT count towards ledger totals.
+                            </span>
+                          </div>
+                        )}
                         <button
                           type="submit"
                           onClick={handleSubmit}
-                          disabled={isDuplicateCV || (isStockAllocationMode ? (totals.cib_coh <= 0 || totals.cib_coh > targetCib) : !isVarianceZero) || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT'}
-                          className={`w-full text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${(isDuplicateCV || (isStockAllocationMode ? (totals.cib_coh <= 0 || totals.cib_coh > targetCib) : !isVarianceZero) || targetCib === 0 || isSaving || selectedTransactionFilter === 'EWT')
-                            ? 'bg-slate-500 dark:bg-slate-700 cursor-not-allowed opacity-50 shadow-none'
-                            : 'bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 shadow-blue-900/20 dark:shadow-none'
-                            }`}
+                          disabled={isDuplicateCV || (!isMonitoringOnly && (isStockAllocationMode ? (totals.cib_coh <= 0 || totals.cib_coh > targetCib) : !isVarianceZero) || (targetCib === 0 && !isMonitoringOnly)) || isSaving || selectedTransactionFilter === 'EWT'}
+                          className={`w-full text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
+                            isDuplicateCV || isSaving || selectedTransactionFilter === 'EWT'
+                              ? 'bg-slate-500 dark:bg-slate-700 cursor-not-allowed opacity-50 shadow-none'
+                              : isMonitoringOnly
+                                ? 'bg-amber-500 hover:bg-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500 shadow-amber-900/20'
+                                : (!isVarianceZero && !isStockAllocationMode) || (targetCib === 0)
+                                  ? 'bg-slate-500 dark:bg-slate-700 cursor-not-allowed opacity-50 shadow-none'
+                                  : 'bg-blue-600 hover:bg-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 shadow-blue-900/20 dark:shadow-none'
+                          }`}
                         >
-                          <Save size={18} /> {selectedTransactionFilter === 'EWT' ? 'View Only (Filtered)' : (isSaving ? 'Saving...' : (editingId ? 'Update Disbursement' : 'Post Disbursement'))}
+                          <Save size={18} /> {selectedTransactionFilter === 'EWT'
+                            ? 'View Only (Filtered)'
+                            : isSaving ? 'Saving...'
+                            : isMonitoringOnly
+                              ? (editingId ? 'Update Monitoring Draft' : 'Save Monitoring Draft')
+                              : (editingId ? 'Update Disbursement' : 'Post Disbursement')}
                         </button>
                         <span className="text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hidden md:block">
                           You can also use <kbd className="px-1.5 py-0.5 bg-slate-700 dark:bg-slate-800 rounded text-slate-300 dark:text-slate-400 border border-slate-600 dark:border-slate-700">CTRL + Enter</kbd>
