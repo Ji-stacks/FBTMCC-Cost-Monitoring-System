@@ -773,8 +773,21 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       return `solo_${rec.id}`;
     };
 
+    // ── Group by CV#, OR#, or created_at proximity if both are empty (crucial for drafts) ──
     const targetKey = getKey(d);
-    const fullUnderlyingRecords = disbursements.filter(rec => getKey(rec) === targetKey);
+    let fullUnderlyingRecords = [];
+    if (d.cv_no && d.cv_no.trim() !== '') {
+      fullUnderlyingRecords = disbursements.filter(rec => rec.cv_no && rec.cv_no.trim().toLowerCase() === d.cv_no.trim().toLowerCase());
+    } else if (d.or_inv_no && d.or_inv_no.trim() !== '') {
+      fullUnderlyingRecords = disbursements.filter(rec => rec.or_inv_no && rec.or_inv_no.trim().toLowerCase() === d.or_inv_no.trim().toLowerCase());
+    } else {
+      const dTime = d.created_at ? new Date(d.created_at).getTime() : 0;
+      fullUnderlyingRecords = disbursements.filter(rec => {
+        if (!rec.created_at) return false;
+        const recTime = new Date(rec.created_at).getTime();
+        return Math.abs(dTime - recTime) < 3000; // within 3 seconds
+      });
+    }
 
     // ── Set monitoring toggle FIRST to avoid stale-state race with resetForm ──
     const monitoringFlag = Boolean(fullUnderlyingRecords[0]?.is_monitoring_only);
@@ -1113,6 +1126,35 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
           is_monitoring_only: true
         };
       });
+
+      // ── Append stock records in draft mode too (same as normal mode) ──
+      if (isAddStocksChecked && !isStockAllocationMode) {
+        stocksList.forEach((stock, sIdx) => {
+          const amt = parseFloat(String(stock.amount).replace(/,/g, '')) || 0;
+          if (amt > 0) {
+            payloads.push({
+              id: `new_stock_${sIdx}`,
+              ...finalHeaderData,
+              project_code: null,
+              payee: finalHeaderData.payee || null,
+              target_cib: 0,
+              input_tax: 0,
+              output_tax: 0,
+              accts_pay: 0,
+              expenses: [],
+              attachments: modalAttachments,
+              gross_amount: amt,
+              ewt_amount: 0,
+              net_amount: 0,
+              stocks_amount: amt,
+              stock_description: stock.description.trim() || null,
+              created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
+              costing_type: 'normal',
+              is_monitoring_only: true
+            });
+          }
+        });
+      }
 
       if (editingId) {
         setPasswordModal({ isOpen: true, action: 'update_group', payload: payloads, oldIds: editingUnderlyingRecords.map(r => r.id) });
