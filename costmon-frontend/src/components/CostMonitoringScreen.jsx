@@ -277,16 +277,23 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     const normalExpenses = projectExpenses.filter(d => d.costing_type === 'normal' || !d.costing_type);
     const additionalExpenses = projectExpenses.filter(d => d.costing_type === 'additional');
 
-    const totalNormalExpenses = normalExpenses.reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => {
-      const amt = parseFloat(exp.amount) || 0;
-      const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
-      return s + (isLabor ? amt / 0.98 : amt);
-    }, 0), 0);
-    const totalAdditionalExpenses = additionalExpenses.reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => {
-      const amt = parseFloat(exp.amount) || 0;
-      const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
-      return s + (isLabor ? amt / 0.98 : amt);
-    }, 0), 0);
+    const totalNormalExpenses = normalExpenses.reduce((sum, d) => {
+      // Monitoring-only drafts are excluded from all cost totals
+      if (d.is_monitoring_only) return sum;
+      return sum + (d.expenses || []).reduce((s, exp) => {
+        const amt = parseFloat(exp.amount) || 0;
+        const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
+        return s + (isLabor ? amt / 0.98 : amt);
+      }, 0);
+    }, 0);
+    const totalAdditionalExpenses = additionalExpenses.reduce((sum, d) => {
+      if (d.is_monitoring_only) return sum;
+      return sum + (d.expenses || []).reduce((s, exp) => {
+        const amt = parseFloat(exp.amount) || 0;
+        const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
+        return s + (isLabor ? amt / 0.98 : amt);
+      }, 0);
+    }, 0);
 
     const vatNormal = contractCost * (1 - (1 / 1.12));
     const budgetCostNormal = contractCost - vatNormal;
@@ -374,7 +381,9 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
             // miscCategory holds the original category name for display in the Misc table
             miscCategory: targetCat === MISC_KEY ? originalCat : '',
             laborLess, laborEwt, laborTotal, matlQty: 0, matlUnitCost: 0,
-            matlTotal, totalMatlCost, totalLaborCost
+            matlTotal, totalMatlCost, totalLaborCost,
+            // Carry the monitoring flag through so renderers can badge & skip this item
+            is_monitoring_only: Boolean(d.is_monitoring_only)
           });
         });
       }
@@ -637,19 +646,28 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                           <div className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
                             <span className="truncate pr-2 text-slate-800 dark:text-slate-200">Miscellaneous Cost:</span>
                             <span className="font-mono font-black text-slate-900 dark:text-white">
-                              {formatMoney(expensesByCategory[MISC_KEY].reduce((sum, item) => sum + item.grossAmount, 0))}
+                              {formatMoney(expensesByCategory[MISC_KEY].reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.grossAmount, 0))}
+                              {expensesByCategory[MISC_KEY].some(item => item.is_monitoring_only) && (
+                                <span className="ml-1.5 text-[8px] font-black bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full uppercase tracking-wider align-middle">+DRAFT</span>
+                              )}
                             </span>
                           </div>
                         )}
 
                         {/* DYNAMIC CATEGORIES */}
                         {displayedCategories.filter(cat => cat !== MISC_KEY).map(cat => {
-                          const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.grossAmount, 0) || 0;
-                          if (catTotal === 0) return null;
+                          const catTotal = expensesByCategory[cat]?.reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.grossAmount, 0) || 0;
+                          const hasDraft = expensesByCategory[cat]?.some(item => item.is_monitoring_only);
+                          if (catTotal === 0 && !hasDraft) return null;
                           return (
                             <div key={cat} className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
                               <span className="truncate pr-2">{cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase()}:</span>
-                              <span className="font-mono font-black">{formatMoney(catTotal)}</span>
+                              <span className="font-mono font-black flex items-center gap-1">
+                                {formatMoney(catTotal)}
+                                {hasDraft && (
+                                  <span className="text-[8px] font-black bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full uppercase tracking-wider">+DRAFT</span>
+                                )}
+                              </span>
                             </div>
                           );
                         })}

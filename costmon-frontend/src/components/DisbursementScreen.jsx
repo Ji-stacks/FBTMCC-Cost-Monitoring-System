@@ -754,7 +754,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         headerData: JSON.stringify(initHeader),
         costingGroups: JSON.stringify(initGroups),
         isAddStocksChecked: false,
-        stocksList: [{ amount: '', description: '' }]
+        stocksList: [{ amount: '', description: '' }],
+        isMonitoringOnly: false
       });
       setIsModalOpen(true);
     }
@@ -774,6 +775,10 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     const targetKey = getKey(d);
     const fullUnderlyingRecords = disbursements.filter(rec => getKey(rec) === targetKey);
+
+    // ── Set monitoring toggle FIRST to avoid stale-state race with resetForm ──
+    const monitoringFlag = Boolean(fullUnderlyingRecords[0]?.is_monitoring_only);
+    setIsMonitoringOnly(monitoringFlag);
 
     setEditingId(d.id);
     setEditingUnderlyingRecords(fullUnderlyingRecords);
@@ -882,7 +887,8 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     setCostingGroups(parsedGroups);
     setModalAttachments(d.attachments || []);
-    setIsMonitoringOnly(Boolean(fullUnderlyingRecords[0]?.is_monitoring_only));
+    // NOTE: setIsMonitoringOnly is already called at the top of this function
+    // to guarantee it fires before any other state update and avoids stale closure races.
 
     const stockRecords = fullUnderlyingRecords.filter(r => (parseFloat(r.stocks_amount) || 0) > 0);
 
@@ -906,7 +912,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         amount: String(r.stocks_amount).replace(/\B(?=(\d{3})+(?!\d))/g, ','),
         description: r.stock_description || ''
       })) : [{ amount: '', description: '' }],
-      isMonitoringOnly: Boolean(fullUnderlyingRecords[0]?.is_monitoring_only)
+      isMonitoringOnly: monitoringFlag
     });
 
     setErrorMessage('');
@@ -1010,37 +1016,104 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     let finalHeaderData = { ...headerData };
 
     if (isDraftMode) {
-      // In monitoring/draft mode — nullify empty strings but skip all required-field checks
+      // In monitoring/draft mode — nullify empty strings but skip required-field / balance checks
       ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee', 'cv_no'].forEach(key => {
         if (typeof finalHeaderData[key] === 'string' && finalHeaderData[key].trim() === "") {
           finalHeaderData[key] = null;
         }
       });
+
       const projectCodes = Array.isArray(finalHeaderData.project_code)
         ? finalHeaderData.project_code
         : (typeof finalHeaderData.project_code === 'string' ? finalHeaderData.project_code.split(',').filter(Boolean) : []);
-      // Use placeholder project if none selected so multi-project split still works
       const finalProjectCodes = projectCodes.length > 0 ? projectCodes : [''];
       const numProjects = Math.max(finalProjectCodes.length, 1);
-      const payloads = finalProjectCodes.map((projCode, index) => ({
-        id: editingId ? (editingUnderlyingRecords[index]?.id || `new_${index}`) : `new_${index}`,
-        ...finalHeaderData,
-        project_code: projCode || null,
-        target_cib: parseFloat(String(finalHeaderData.target_cib || '0').replace(/,/g, '')) || 0,
-        input_tax: parseFloat(String(finalHeaderData.input_tax || '0').replace(/,/g, '')) || 0,
-        output_tax: parseFloat(String(finalHeaderData.output_tax || '0').replace(/,/g, '')) || 0,
-        accts_pay: 0,
-        expenses: [],
-        attachments: modalAttachments,
-        gross_amount: 0,
-        ewt_amount: 0,
-        net_amount: 0,
-        stocks_amount: 0,
-        stock_description: null,
-        created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
-        costing_type: finalHeaderData.costing_type || 'normal',
-        is_monitoring_only: true
-      }));
+
+      // ── Compute real line-item amounts (same math as normal mode) ──
+      // This ensures the row shows actual figures in the ledger table.
+      // The is_monitoring_only flag ensures they are excluded from grand totals.
+      const payloads = finalProjectCodes.map((projCode, index) => {
+        let projectTotalDebit = 0;
+        let projectEwt = 0;
+        const projectExpenses = [];
+
+        costingGroups.forEach(group => {
+          const groupLines = [...group.constructionLines, ...group.miscLines].filter(line => {
+            const cat = line.category ? line.category.trim() : '';
+            return cat !== '' && !cat.toLowerCase().includes('select');
+          });
+
+          groupLines.forEach(line => {
+            const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
+            let amt;
+            const targetProjects = Array.isArray(group.targetProject) ? group.targetProject : [group.targetProject];
+
+            if (targetProjects.includes('all')) {
+              const base = Math.floor((rawAmt / numProjects) * 100) / 100;
+              const remainder = Math.round((rawAmt - (base * numProjects)) * 100) / 100;
+              amt = (index === 0) ? Number((base + remainder).toFixed(2)) : base;
+            } else if (targetProjects.includes(projCode)) {
+              const numTargets = targetProjects.length;
+              const targetIndex = targetProjects.indexOf(projCode);
+              const base = Math.floor((rawAmt / numTargets) * 100) / 100;
+              const remainder = Math.round((rawAmt - (base * numTargets)) * 100) / 100;
+              amt = (targetIndex === 0) ? Number((base + remainder).toFixed(2)) : base;
+            } else {
+              return; // skip — this group targets a different project
+            }
+
+            projectExpenses.push({ ...line, amount: amt, groupId: group.id, targetProject: group.targetProject });
+            projectTotalDebit += amt;
+
+            const cat = (line.category || '').toUpperCase();
+            if (cat === 'LABOR /SUBCONTRACTOR' || cat === 'LABOR/PAYROLL') {
+              projectEwt += (amt / 0.98) - amt;
+            }
+          });
+        });
+
+        const projNet   = Number(projectTotalDebit.toFixed(2));
+        const projEwt   = Number(projectEwt.toFixed(2));
+        const projGross = Number((projNet + projEwt).toFixed(2));
+        // net_amount = gross - ewt - stocks — must always satisfy the backend formula
+        const backendNet = Number((projGross - projEwt).toFixed(2)); // equals projNet
+
+        const getSplitVal = (val) => {
+          const num = parseFloat(String(val).replace(/,/g, ''));
+          if (isNaN(num) || !num) return 0;
+          const base = Math.floor((num / numProjects) * 100) / 100;
+          const remainder = Math.round((num - (base * numProjects)) * 100) / 100;
+          return (index === 0) ? Number((base + remainder).toFixed(2)) : base;
+        };
+
+        return {
+          id: editingId ? (editingUnderlyingRecords[index]?.id || `new_${index}`) : `new_${index}`,
+          ...finalHeaderData,
+          project_code: projCode || null,
+          target_cib: getSplitVal(finalHeaderData.target_cib),
+          input_tax: getSplitVal(finalHeaderData.input_tax),
+          output_tax: getSplitVal(finalHeaderData.output_tax),
+          accts_pay: 0,
+          expenses: projectExpenses.map(exp => {
+            const cat = (exp.category || '').toUpperCase();
+            const taxAmount = (cat === 'LABOR /SUBCONTRACTOR' || cat === 'LABOR/PAYROLL')
+              ? Number(((exp.amount / 0.98) - exp.amount).toFixed(2)) : 0;
+            const netAmount = exp.amount;
+            const baseAmount = Number((netAmount + taxAmount).toFixed(2));
+            return { ...exp, category: exp.category || null, debit: baseAmount, ewt: taxAmount, accts_pay: 0, credit: netAmount };
+          }),
+          attachments: modalAttachments,
+          gross_amount: projGross,
+          ewt_amount: projEwt,
+          net_amount: backendNet,
+          stocks_amount: 0,
+          stock_description: null,
+          created_at: editingId ? (editingUnderlyingRecords[0]?.created_at || new Date().toISOString()) : new Date().toISOString(),
+          costing_type: finalHeaderData.costing_type || 'normal',
+          is_monitoring_only: true
+        };
+      });
+
       if (editingId) {
         setPasswordModal({ isOpen: true, action: 'update_group', payload: payloads, oldIds: editingUnderlyingRecords.map(r => r.id) });
       } else {
@@ -2058,7 +2131,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className={`lg:col-span-2 space-y-6 transition-all duration-300 ${targetCib <= 0 ? 'opacity-40 pointer-events-none grayscale-[50%]' : ''}`}>
+                  <div className={`lg:col-span-2 space-y-6 transition-all duration-300 ${(targetCib <= 0 && !isMonitoringOnly) ? 'opacity-40 pointer-events-none grayscale-[50%]' : ''}`}>
 
                     {/* 2. COST BREAKDOWN */}
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-300">

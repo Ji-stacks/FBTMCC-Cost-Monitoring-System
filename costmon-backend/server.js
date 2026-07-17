@@ -624,9 +624,10 @@ app.get('/api/disbursements', authenticateToken, (req, res) => {
 app.post('/api/disbursements', authenticateToken, (req, res) => {
   const dataList = Array.isArray(req.body) ? req.body : [req.body];
 
-  // Backend validation: skip net-amount check for stock allocation entries (stocks_amount is forced to 0)
+  // Backend validation: skip net-amount check for stock allocation entries and monitoring-only drafts
   for (let data of dataList) {
-    if (data.is_stock_allocation) continue; // allocation records have stocks_amount=0; integrity already correct
+    if (data.is_stock_allocation) continue;
+    if (data.is_monitoring_only) continue; // monitoring drafts may have any amount; excluded from totals
     const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
     if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
       return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
@@ -701,9 +702,12 @@ app.put('/api/disbursements/:id', authenticateToken, (req, res) => {
   const data = req.body; const id = req.params.id;
 
   // Backend validation: Compute expected net amount (Gross - EWT - Stocks)
-  const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
-  if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
-    return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
+  // Skip check for monitoring-only drafts — amounts are display-only, excluded from grand totals
+  if (!data.is_monitoring_only) {
+    const computed_net_amount = Number(data.gross_amount || 0) - Number(data.ewt_amount || 0) - Number(data.stocks_amount || 0);
+    if (Math.abs(computed_net_amount - Number(data.net_amount || 0)) > 0.01) {
+      return res.status(400).json({ error: "Data integrity check failed: Net amount mismatch." });
+    }
   }
 
   const s = (val) => (val === "" || val === undefined) ? null : val;
