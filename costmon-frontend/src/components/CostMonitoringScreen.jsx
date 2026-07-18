@@ -277,16 +277,23 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     const normalExpenses = projectExpenses.filter(d => d.costing_type === 'normal' || !d.costing_type);
     const additionalExpenses = projectExpenses.filter(d => d.costing_type === 'additional');
 
-    const totalNormalExpenses = normalExpenses.reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => {
-      const amt = parseFloat(exp.amount) || 0;
-      const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
-      return s + (isLabor ? amt / 0.98 : amt);
-    }, 0), 0);
-    const totalAdditionalExpenses = additionalExpenses.reduce((sum, d) => sum + (d.expenses || []).reduce((s, exp) => {
-      const amt = parseFloat(exp.amount) || 0;
-      const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
-      return s + (isLabor ? amt / 0.98 : amt);
-    }, 0), 0);
+    const totalNormalExpenses = normalExpenses.reduce((sum, d) => {
+      // Monitoring-only drafts are excluded from all cost totals
+      if (d.is_monitoring_only) return sum;
+      return sum + (d.expenses || []).reduce((s, exp) => {
+        const amt = parseFloat(exp.amount) || 0;
+        const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
+        return s + (isLabor ? amt / 0.98 : amt);
+      }, 0);
+    }, 0);
+    const totalAdditionalExpenses = additionalExpenses.reduce((sum, d) => {
+      if (d.is_monitoring_only) return sum;
+      return sum + (d.expenses || []).reduce((s, exp) => {
+        const amt = parseFloat(exp.amount) || 0;
+        const isLabor = (exp.category || '').toUpperCase().includes('LABOR');
+        return s + (isLabor ? amt / 0.98 : amt);
+      }, 0);
+    }, 0);
 
     const vatNormal = contractCost * (1 - (1 / 1.12));
     const budgetCostNormal = contractCost - vatNormal;
@@ -374,7 +381,9 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
             // miscCategory holds the original category name for display in the Misc table
             miscCategory: targetCat === MISC_KEY ? originalCat : '',
             laborLess, laborEwt, laborTotal, matlQty: 0, matlUnitCost: 0,
-            matlTotal, totalMatlCost, totalLaborCost
+            matlTotal, totalMatlCost, totalLaborCost,
+            // Carry the monitoring flag through so renderers can badge & skip this item
+            is_monitoring_only: Boolean(d.is_monitoring_only)
           });
         });
       }
@@ -437,7 +446,8 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
             id: d.id, lineId: exp.id, date: d.date, cv_no: d.cv_no, or_inv_no: d.or_inv_no,
             payee: d.payee, particulars: d.particulars, itemName: exp.category || 'Uncategorized',
             amount: amount, grossAmount: grossAmount, laborLess, laborEwt, laborTotal, matlQty: 0,
-            matlUnitCost: 0, matlTotal, totalMatlCost, totalLaborCost
+            matlUnitCost: 0, matlTotal, totalMatlCost, totalLaborCost,
+            is_monitoring_only: Boolean(d.is_monitoring_only)
           });
         });
       }
@@ -595,10 +605,10 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                 <div className="uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 font-black">Contract Labor Cost</div>
                 <div className="space-y-2 pl-4 border-l-2 border-slate-400 dark:border-slate-600 ml-2">
                   <div className="flex justify-between items-center text-slate-600 dark:text-slate-300">
-                    <span>Labor / Payroll:</span><span className="font-mono font-bold">{formatMoney(expensesByCategory["LABOR/PAYROLL"]?.reduce((sum, item) => sum + item.grossAmount, 0) || 0)}</span>
+                    <span>Labor / Payroll:</span><span className="font-mono font-bold">{formatMoney(expensesByCategory["LABOR/PAYROLL"]?.reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.grossAmount, 0) || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center text-slate-600 dark:text-slate-300">
-                    <span>SSS/Pag-ibig/PhilHealth:</span><span className="font-mono font-bold">{formatMoney(expensesByCategory["SSS/PAG-IBIG / PHILHEALTH"]?.reduce((sum, item) => sum + item.grossAmount, 0) || 0)}</span>
+                    <span>SSS/Pag-ibig/PhilHealth:</span><span className="font-mono font-bold">{formatMoney(expensesByCategory["SSS/PAG-IBIG / PHILHEALTH"]?.reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.grossAmount, 0) || 0)}</span>
                   </div>
                 </div>
 
@@ -613,7 +623,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                 <div className="grid grid-cols-[140px_1fr] items-center py-1 mb-4">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black">Labor cost:</span>
                   <div className="flex justify-end gap-2 items-end">
-                    <span className="font-mono text-sm text-slate-900 dark:text-white font-bold">{formatMoney(expensesByCategory["LABOR/PAYROLL"]?.reduce((sum, item) => sum + item.grossAmount, 0) || 0)}</span><span className="text-[10px] text-slate-500 pb-0.5">PHP</span>
+                    <span className="font-mono text-sm text-slate-900 dark:text-white font-bold">{formatMoney(expensesByCategory["LABOR/PAYROLL"]?.reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.grossAmount, 0) || 0)}</span><span className="text-[10px] text-slate-500 pb-0.5">PHP</span>
                   </div>
                 </div>
 
@@ -637,19 +647,28 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                           <div className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
                             <span className="truncate pr-2 text-slate-800 dark:text-slate-200">Miscellaneous Cost:</span>
                             <span className="font-mono font-black text-slate-900 dark:text-white">
-                              {formatMoney(expensesByCategory[MISC_KEY].reduce((sum, item) => sum + item.grossAmount, 0))}
+                              {formatMoney(expensesByCategory[MISC_KEY].reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.grossAmount, 0))}
+                              {expensesByCategory[MISC_KEY].some(item => item.is_monitoring_only) && (
+                                <span className="ml-1.5 text-[8px] font-black bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full uppercase tracking-wider align-middle">+DRAFT</span>
+                              )}
                             </span>
                           </div>
                         )}
 
                         {/* DYNAMIC CATEGORIES */}
                         {displayedCategories.filter(cat => cat !== MISC_KEY).map(cat => {
-                          const catTotal = expensesByCategory[cat]?.reduce((sum, item) => sum + item.grossAmount, 0) || 0;
-                          if (catTotal === 0) return null;
+                          const catTotal = expensesByCategory[cat]?.reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.grossAmount, 0) || 0;
+                          const hasDraft = expensesByCategory[cat]?.some(item => item.is_monitoring_only);
+                          if (catTotal === 0 && !hasDraft) return null;
                           return (
                             <div key={cat} className="flex justify-between border-b border-slate-300 dark:border-slate-600 pb-2">
                               <span className="truncate pr-2">{cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase()}:</span>
-                              <span className="font-mono font-black">{formatMoney(catTotal)}</span>
+                              <span className="font-mono font-black flex items-center gap-1">
+                                {formatMoney(catTotal)}
+                                {hasDraft && (
+                                  <span className="text-[8px] font-black bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full uppercase tracking-wider">+DRAFT</span>
+                                )}
+                              </span>
                             </div>
                           );
                         })}
@@ -890,19 +909,26 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                               <td className="p-3 text-center font-bold text-slate-700 dark:text-slate-300 border-r border-slate-800">{item.date}</td>
                               <td className="p-3 text-center border-r border-slate-800"><span className="px-1.5 py-1 bg-white text-slate-800 rounded font-mono font-bold text-[10px] border border-slate-300">{item.cv_no || 'N/A'}</span></td>
                               <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300 border-r border-slate-800">{item.or_inv_no || '-'}</td>
-                              <td className="p-3 font-bold text-slate-800 dark:text-slate-200 text-left border-r border-slate-800 truncate max-w-[150px]" title={item.payee}>{item.payee}</td>
+                              <td className="p-3 font-bold text-slate-800 dark:text-slate-200 text-left border-r border-slate-800 truncate max-w-[150px]" title={item.payee}>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span>{item.payee}</span>
+                                  {item.is_monitoring_only && (
+                                    <span className="px-1.5 py-0.5 bg-amber-400 text-amber-900 rounded font-black text-[9px] uppercase tracking-widest animate-pulse align-middle">DRAFT</span>
+                                  )}
+                                </div>
+                              </td>
                               {/* Item Description column — only for Misc table */}
                               {isMisc && (
                                 <td className="p-3 font-medium text-slate-600 dark:text-slate-400 text-left border-r border-slate-800 truncate max-w-[150px]" title={item.miscCategory}>{item.miscCategory || '-'}</td>
                               )}
-                              <td className="p-3 text-center font-mono font-medium text-slate-600 dark:text-slate-400 border-r border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">{formatMoney(item.laborLess)}</td>
-                              <td className="p-3 text-center font-mono font-medium text-slate-600 dark:text-slate-400 border-r border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">{formatMoney(item.laborEwt)}</td>
-                              <td className="p-3 text-center font-mono font-medium text-slate-600 dark:text-slate-400 border-r border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">{formatMoney(item.laborTotal)}</td>
-                              <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800">{formatMoney(item.matlQty)}</td>
-                              <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800">{formatMoney(item.matlUnitCost)}</td>
-                              <td className="p-3 text-center font-mono font-medium text-slate-600 border-r border-slate-800">{formatMoney(item.matlTotal)}</td>
-                              <td className="p-3 text-right font-mono font-bold text-slate-800 dark:text-slate-200 border-r border-slate-800 bg-slate-100/50">{formatMoney(item.totalMatlCost)}</td>
-                              <td className="p-3 text-right pr-4 font-mono font-black text-slate-900 dark:text-white border-r border-slate-800 bg-slate-100/50">{formatMoney(item.totalLaborCost)}</td>
+                              <td className={`p-3 text-center font-mono font-medium border-r border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>{formatMoney(item.laborLess)}</td>
+                              <td className={`p-3 text-center font-mono font-medium border-r border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>{formatMoney(item.laborEwt)}</td>
+                              <td className={`p-3 text-center font-mono font-medium border-r border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>{formatMoney(item.laborTotal)}</td>
+                              <td className={`p-3 text-center font-mono font-medium border-r border-slate-800 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-600'}`}>{formatMoney(item.matlQty)}</td>
+                              <td className={`p-3 text-center font-mono font-medium border-r border-slate-800 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-600'}`}>{formatMoney(item.matlUnitCost)}</td>
+                              <td className={`p-3 text-center font-mono font-medium border-r border-slate-800 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-600'}`}>{formatMoney(item.matlTotal)}</td>
+                              <td className={`p-3 text-right font-mono font-bold border-r border-slate-800 bg-slate-100/50 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-200'}`}>{formatMoney(item.totalMatlCost)}</td>
+                              <td className={`p-3 text-right pr-4 font-mono font-black border-r border-slate-800 bg-slate-100/50 ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}>{formatMoney(item.totalLaborCost)}</td>
                               {canEdit && (
                                 <td className="p-2 text-center bg-white dark:bg-slate-800">
                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(item.id); }} className="p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-800 rounded-lg"><Trash2 size={14} /></button>
@@ -912,8 +938,8 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                           ))}
                           <tr className="bg-slate-100 dark:bg-slate-700/80 border-t-2 border-slate-800 dark:border-slate-600">
                             <td colSpan={isMisc ? 11 : 10} className="p-3 text-right font-black text-[11px] uppercase tracking-widest text-slate-800 dark:text-slate-200 border-r border-slate-800">TOTAL FOR {category}:</td>
-                            <td className="p-3 text-right font-mono font-black text-slate-800 dark:text-slate-200 text-sm border-r border-slate-800 bg-slate-200/50">₱ {items.reduce((sum, i) => sum + i.totalMatlCost, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                            <td className="p-3 text-right pr-4 font-mono font-black text-slate-800 dark:text-slate-200 text-sm border-r border-slate-800 bg-slate-200/50">₱ {items.reduce((sum, i) => sum + i.totalLaborCost, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="p-3 text-right font-mono font-black text-slate-800 dark:text-slate-200 text-sm border-r border-slate-800 bg-slate-200/50">₱ {items.reduce((sum, i) => i.is_monitoring_only ? sum : sum + i.totalMatlCost, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="p-3 text-right pr-4 font-mono font-black text-slate-800 dark:text-slate-200 text-sm border-r border-slate-800 bg-slate-200/50">₱ {items.reduce((sum, i) => i.is_monitoring_only ? sum : sum + i.totalLaborCost, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                             {canEdit && <td></td>}
                           </tr>
                         </tbody>
@@ -1063,7 +1089,7 @@ function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick,
 
   if (!isOpen) return null;
 
-  const totalAmount = data.reduce((sum, item) => sum + item.amount, 0);
+  const totalAmount = data.reduce((sum, item) => item.is_monitoring_only ? sum : sum + item.amount, 0);
   const formatMoney = (val) => {
     if (val === null || val === undefined || val === '') return '-';
     if (isNaN(val)) return '0.00';
@@ -1117,14 +1143,19 @@ function AdditionalsLedgerModal({ isOpen, onClose, data, canEdit, onDeleteClick,
 
                         <td className="p-4 font-bold text-slate-800 dark:text-slate-200 text-left border-r border-slate-800 dark:border-slate-700" title={`${item.payee} - ${item.particulars}`}>
                           <div className="flex flex-col gap-0.5">
-                            <span className="truncate max-w-[250px]">{item.payee}</span>
+                            <span className="truncate max-w-[250px] flex items-center gap-1.5">
+                              {item.payee}
+                              {item.is_monitoring_only && (
+                                <span className="px-1.5 py-0.5 bg-amber-400 text-amber-900 rounded font-black text-[9px] uppercase tracking-widest animate-pulse align-middle">DRAFT</span>
+                              )}
+                            </span>
                             {item.particulars && <span className="text-[9px] text-slate-500 font-medium truncate max-w-[250px]">{item.particulars}</span>}
                           </div>
                         </td>
 
                         <td className="p-4 font-black text-red-700 dark:text-red-400 text-left border-r border-slate-800 dark:border-slate-700 truncate max-w-[250px]" title={item.itemName}>{item.itemName}</td>
 
-                        <td className="p-4 text-right pr-6 font-mono font-black text-slate-900 dark:text-white border-r border-slate-800 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/80 text-sm">
+                        <td className={`p-4 text-right pr-6 font-mono font-black border-r border-slate-800 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/80 text-sm ${item.is_monitoring_only ? 'opacity-40 line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}>
                           {formatMoney(item.amount)}
                         </td>
 
