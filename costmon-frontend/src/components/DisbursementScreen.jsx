@@ -1793,7 +1793,11 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                 ) : groupedDisbursements.map(d => (
                   <tr
                     key={d.id}
-                    className={`even:bg-slate-50/80 dark:even:bg-slate-800/80 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors group ${canEdit ? 'cursor-pointer' : ''}`}
+                    className={
+                      d.is_monitoring_only
+                        ? `bg-amber-50/40 dark:bg-amber-950/20 outline outline-2 outline-amber-400 -outline-offset-2 transition-colors group ${canEdit ? 'cursor-pointer' : ''}`
+                        : `even:bg-slate-50/80 dark:even:bg-slate-800/80 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors group ${canEdit ? 'cursor-pointer' : ''}`
+                    }
                     onDoubleClick={() => handleEditRow(d)}
                   >
                     <td className="px-6 py-4 font-black text-slate-600 dark:text-slate-300 sticky left-0 z-10 bg-white dark:bg-slate-900 group-even:bg-slate-50 dark:group-even:bg-slate-800 group-hover:bg-blue-100/50 dark:group-hover:bg-blue-900/30 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">{d.date}</td>
