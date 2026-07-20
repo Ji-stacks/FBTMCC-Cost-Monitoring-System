@@ -430,28 +430,13 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       const CC_WO_VAT_OH_PM = CC_WITHOUT_VAT - OH_30;
       const EFFECTIVE_OVERHEAD = OH_30;
 
+      // For construction projects, the dynamic overhead columns (Office/Payatas/Residence expenses)
+      // do not apply to them directly. They are only sources of "Effective Overhead" (Income).
       let total_specific_expenses = 0;
       const dynamicExpenses = {};
       customColumns.forEach(col => {
-        const sum = projExpenses.reduce((total, d) => {
-          const lineTotal = (d.expenses || [])
-            .filter(e => {
-              if (!e.category) return false;
-              return col.mappedCategories.some(kw => {
-                const eClean = String(e.category).toLowerCase().replace(/[^a-z0-9]/g, '');
-                const kClean = String(kw).toLowerCase().replace(/[^a-z0-9]/g, '');
-                if (!eClean || !kClean) return false;
-                return eClean.includes(kClean) || kClean.includes(eClean);
-              });
-            })
-            .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-          return total + lineTotal;
-        }, 0);
-        dynamicExpenses[col.id] = sum;
-        total_specific_expenses += sum;
+        dynamicExpenses[col.id] = 0;
       });
-
-      const NET_PROFIT = TCC - total_specific_expenses;
 
       // -----------------------------------------------
       // NEW: D5-based formula columns for unified table
@@ -462,6 +447,9 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       const EQ_30_OH = CONTRACT_WO_VAT_OH_PM * 0.3;
       const EQ_10_RETENTION = TCC * 0.1;
       const EFFECTIVE_OH = EQ_30_OH - EQ_10_RETENTION;
+
+      // The project's contribution to Net Profit in the Unified Ledger is its Effective Overhead
+      const NET_PROFIT = EFFECTIVE_OH;
 
       const computedData = {
         ...p,
@@ -725,7 +713,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       });
 
       projs.forEach(p => {
-        rows.push({
+        const rowData = {
           rowType: 'project',
           id: p.project_code,
           project_code: p.project_code,
@@ -740,7 +728,14 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
           EFFECTIVE_OH: p.EFFECTIVE_OH || 0,
           total_specific_expenses: p.total_specific_expenses || 0,
           NET_PROFIT: p.NET_PROFIT || 0,
+        };
+
+        // Add dynamic column values to rowData
+        customColumns.forEach(col => {
+          rowData[col.id] = p[col.id] || 0;
         });
+
+        rows.push(rowData);
       });
 
       const zero = {
@@ -1393,12 +1388,12 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       <th className="p-3 sticky left-[90px] z-20 bg-slate-100 dark:bg-slate-900 border-r border-slate-300 dark:border-slate-700 w-[220px]">Code / Name</th>
 
                       {/* Contract formula cols — indigo group */}
-                      <th className="p-3 text-center bg-indigo-50 dark:bg-indigo-900/10 text-indigo-700 dark:text-indigo-400 w-[160px]">Contract plus Add&apos;l w/VAT</th>
-                      <th className="p-3 text-center bg-indigo-50/70 dark:bg-indigo-900/5 text-indigo-600 dark:text-indigo-400 w-[155px]">Contract w/o Vat</th>
-                      <th className="p-3 text-center bg-indigo-50/70 dark:bg-indigo-900/5 text-indigo-600 dark:text-indigo-400 w-[195px]">Contract w/o Vat &amp; Overhead &amp; PM</th>
-                      <th className="p-3 text-center bg-purple-50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-400 w-[205px]">Equivalent 30% Overhead, Contingency &amp; PM</th>
-                      <th className="p-3 text-center bg-rose-50 dark:bg-rose-900/10 text-rose-600 w-[195px]">Equivalent 10% Retention</th>
-                      <th className="p-3 text-center font-bold bg-indigo-50/50 dark:bg-indigo-900/5 w-[155px]">Effective Overhead</th>
+                      <th className="p-3 text-center bg-indigo-50 dark:bg-indigo-900/10 text-indigo-700 dark:text-indigo-400 w-[160px] border-r border-indigo-100 dark:border-indigo-800/50">Contract plus Add&apos;l w/VAT</th>
+                      <th className="p-3 text-center bg-indigo-50/70 dark:bg-indigo-900/5 text-indigo-600 dark:text-indigo-400 w-[155px] border-r border-indigo-100 dark:border-indigo-800/50">Contract w/o Vat</th>
+                      <th className="p-3 text-center bg-indigo-50/70 dark:bg-indigo-900/5 text-indigo-600 dark:text-indigo-400 w-[195px] border-r border-indigo-100 dark:border-indigo-800/50">Contract w/o Vat &amp; Overhead &amp; PM</th>
+                      <th className="p-3 text-center bg-purple-50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-400 w-[205px] border-r border-indigo-100 dark:border-indigo-800/50">Equivalent 30% Overhead, Contingency &amp; PM</th>
+                      <th className="p-3 text-center bg-rose-50 dark:bg-rose-900/10 text-rose-600 w-[195px] border-r border-indigo-100 dark:border-indigo-800/50">Equivalent 10% Retention</th>
+                      <th className="p-3 text-center font-bold bg-indigo-50/50 dark:bg-indigo-900/5 w-[155px] border-r border-indigo-100 dark:border-indigo-800/50">Effective Overhead</th>
                       <th className="p-3 text-center bg-slate-50 dark:bg-slate-800 border-r border-indigo-200 dark:border-indigo-800 w-[135px]">Total EOC per Month</th>
 
                       {/* Dynamic Expense cols — amber group */}
@@ -1409,8 +1404,8 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                             setEditingColumn(col);
                             setIsColumnModalOpen(true);
                           }}
-                          className={`p-3 text-center bg-amber-50 dark:bg-amber-900/5 hover:bg-amber-100 dark:hover:bg-amber-900/20 cursor-pointer transition-colors group ${
-                            idx === customColumns.length - 1 ? 'border-r border-amber-200 dark:border-amber-700' : ''
+                          className={`p-3 text-center bg-amber-50 dark:bg-amber-900/5 hover:bg-amber-100 dark:hover:bg-amber-900/20 cursor-pointer transition-colors group border-r ${
+                            idx === customColumns.length - 1 ? 'border-amber-200 dark:border-amber-700' : 'border-amber-100 dark:border-amber-900/50'
                           }`}
                           title="Click to configure column mappings"
                         >
@@ -1422,7 +1417,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       ))}
 
                       {/* Summary cols — emerald group */}
-                      <th className="p-3 text-center text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/10 w-[145px]">Total</th>
+                      <th className="p-3 text-center text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/10 border-r border-emerald-100 dark:border-emerald-800/50 w-[145px]">Total</th>
                       <th className="p-3 text-center text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-900/5 w-[145px]">Net Profit</th>
                     </tr>
                   </thead>
@@ -1469,12 +1464,12 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                             </td>
 
                             {/* ── Project formula cols (summed) ── */}
-                            <td className="p-3 text-right font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-900/10">{fmt(row.TCC)}</td>
-                            <td className="p-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">{fmt(row.CONTRACT_WO_VAT)}</td>
-                            <td className="p-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">{fmt(row.CONTRACT_WO_VAT_OH_PM)}</td>
-                            <td className="p-3 text-right font-mono font-bold text-purple-600 dark:text-purple-400 bg-purple-50/20 dark:bg-purple-900/5">{fmt(row.EQ_30_OH)}</td>
-                            <td className="p-3 text-right font-mono font-bold text-rose-500 bg-rose-50/20 dark:bg-rose-900/5">{fmt(row.EQ_10_RETENTION)}</td>
-                            <td className="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">{fmt(row.EFFECTIVE_OH)}</td>
+                            <td className="p-3 text-right font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-900/10 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.TCC)}</td>
+                            <td className="p-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.CONTRACT_WO_VAT)}</td>
+                            <td className="p-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.CONTRACT_WO_VAT_OH_PM)}</td>
+                            <td className="p-3 text-right font-mono font-bold text-purple-600 dark:text-purple-400 bg-purple-50/20 dark:bg-purple-900/5 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EQ_30_OH)}</td>
+                            <td className="p-3 text-right font-mono font-bold text-rose-500 bg-rose-50/20 dark:bg-rose-900/5 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EQ_10_RETENTION)}</td>
+                            <td className="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EFFECTIVE_OH)}</td>
                             <td className="p-3 text-center border-r border-indigo-200 dark:border-indigo-800">{dash}</td>
 
                             {/* ── Dynamic Expense cols (OFFICE/PAYATAS/RESIDENCE aggregated) ── */}
@@ -1482,8 +1477,8 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                               const val = row[col.id];
                               const isFirst = idx === 0;
                               const isLast = idx === customColumns.length - 1;
-                              let cellClass = "p-3 text-right font-mono text-amber-600 dark:text-amber-500";
-                              if (isFirst) cellClass = "p-3 text-right font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-900/10";
+                              let cellClass = "p-3 text-right font-mono text-amber-600 dark:text-amber-500 border-r border-amber-100 dark:border-amber-800/40";
+                              if (isFirst) cellClass = "p-3 text-right font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-900/10 border-r border-amber-100 dark:border-amber-800/40";
                               if (isLast) cellClass = "p-3 text-right font-mono font-bold text-amber-700 dark:text-amber-400 border-r border-amber-200 dark:border-amber-700";
                               
                               return (
@@ -1494,7 +1489,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                             })}
 
                             {/* ── Summary cols ── */}
-                            <td className="p-3 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-900/10">{fmt(row.total_specific_expenses)}</td>
+                            <td className="p-3 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-900/10 border-r border-emerald-100 dark:border-emerald-800/40">{fmt(row.total_specific_expenses)}</td>
                             <td className={`p-3 text-right font-mono font-black ${
                               row.NET_PROFIT >= 0
                                 ? 'text-emerald-600 dark:text-emerald-400'
@@ -1525,26 +1520,26 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                           </td>
 
                           {/* Contract formula cols */}
-                          <td className="p-3 text-right font-mono text-indigo-700 dark:text-indigo-400 bg-indigo-50/10 dark:bg-indigo-900/5">{fmt(row.TCC)}</td>
-                          <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(row.CONTRACT_WO_VAT)}</td>
-                          <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(row.CONTRACT_WO_VAT_OH_PM)}</td>
-                          <td className="p-3 text-right font-mono text-purple-600 dark:text-purple-400 bg-purple-50/10 dark:bg-purple-900/5">{fmt(row.EQ_30_OH)}</td>
-                          <td className="p-3 text-right font-mono text-rose-500 bg-rose-50/10 dark:bg-rose-900/5">{fmt(row.EQ_10_RETENTION)}</td>
-                          <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(row.EFFECTIVE_OH)}</td>
+                          <td className="p-3 text-right font-mono text-indigo-700 dark:text-indigo-400 bg-indigo-50/10 dark:bg-indigo-900/5 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.TCC)}</td>
+                          <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.CONTRACT_WO_VAT)}</td>
+                          <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.CONTRACT_WO_VAT_OH_PM)}</td>
+                          <td className="p-3 text-right font-mono text-purple-600 dark:text-purple-400 bg-purple-50/10 dark:bg-purple-900/5 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EQ_30_OH)}</td>
+                          <td className="p-3 text-right font-mono text-rose-500 bg-rose-50/10 dark:bg-rose-900/5 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EQ_10_RETENTION)}</td>
+                          <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EFFECTIVE_OH)}</td>
                           <td className="p-3 text-center border-r border-indigo-200 dark:border-indigo-800 text-slate-300 dark:text-slate-700">&mdash;</td>
 
                           {/* Dynamic Expense cols — blank for project rows */}
                           {customColumns.map((col, idx) => {
                             const isFirst = idx === 0;
                             const isLast = idx === customColumns.length - 1;
-                            let cellClass = "p-3";
-                            if (isFirst) cellClass = "p-3 bg-amber-50/10 dark:bg-amber-900/5";
+                            let cellClass = "p-3 border-r border-amber-100 dark:border-amber-800/30";
+                            if (isFirst) cellClass = "p-3 bg-amber-50/10 dark:bg-amber-900/5 border-r border-amber-100 dark:border-amber-800/30";
                             if (isLast) cellClass = "p-3 border-r border-amber-200 dark:border-amber-700 bg-amber-50/10 dark:bg-amber-900/5";
                             return <td key={`empty-${col.id}`} className={cellClass}></td>;
                           })}
 
                           {/* Summary */}
-                          <td className="p-3 text-right font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-900/5">
+                          <td className="p-3 text-right font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-900/5 border-r border-emerald-100 dark:border-emerald-800/40">
                             {row.total_specific_expenses > 0 ? fmt(row.total_specific_expenses) : dash}
                           </td>
                           <td className={`p-3 text-right font-mono font-bold ${
