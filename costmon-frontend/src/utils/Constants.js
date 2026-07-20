@@ -4,7 +4,7 @@ export const SERVER_IP = import.meta.env.VITE_SERVER_IP || 'localhost';
 export const API_URL = `http://${SERVER_IP}:3001/api`;
 
 export const INITIAL_PROJECTS = [
-  
+
 ];
 
 export const EXPENSE_CATEGORIES = [

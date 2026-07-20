@@ -93,6 +93,28 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Office Dashboard Isolated Year Filter State
+  const [officeYear, setOfficeYear] = useState(() => new Date().getFullYear().toString());
+
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    projects.forEach(p => {
+      if (p.project_start && String(p.project_start).trim()) {
+        const d = new Date(p.project_start);
+        if (!isNaN(d.getTime())) years.add(d.getFullYear().toString());
+      }
+    });
+    disbursements.forEach(d => {
+      if (d.date && String(d.date).trim()) {
+        const dDate = new Date(d.date);
+        if (!isNaN(dDate.getTime())) years.add(dDate.getFullYear().toString());
+      }
+    });
+    const currentYear = new Date().getFullYear().toString();
+    years.add(currentYear);
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [projects, disbursements]);
+
   // --- ZOOM LOGIC ---
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('dashboard_zoom');
@@ -464,10 +486,10 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
 
       let total_specific_expenses = 0;
       const dynamicExpenses = {};
-      
+
       // STRICT FILTERING: Only include records from 'OFFICE', 'PAYATAS', 'RESIDENCE' projects
-      const overheadProjExpenses = projExpenses.filter(d => 
-        d.project_code && overheadProjects.some(kw => 
+      const overheadProjExpenses = projExpenses.filter(d =>
+        d.project_code && overheadProjects.some(kw =>
           d.project_code.toUpperCase() === kw.toUpperCase()
         )
       );
@@ -703,7 +725,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       )
     );
 
-    const expsByMonth = {}; 
+    const expsByMonth = {};
     oprDisb.forEach(d => {
       const mk = d.date && String(d.date).trim() ? String(d.date).slice(0, 7) : '__unscheduled__';
       if (!expsByMonth[mk]) {
@@ -730,16 +752,39 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       });
     });
 
-    // ── 2. Create 12 months array ──
-    const allMonths = [];
-    const thisYear = new Date().getFullYear();
-    const monthsNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    for (let m = 1; m <= 12; m++) {
-      const mk = `${thisYear}-${String(m).padStart(2, '0')}`;
-      allMonths.push({ mk, label: `${monthsNames[m - 1].toUpperCase()}` });
+    // ── 2. Create dynamic months array based on actual data ──
+    const monthKeysSet = new Set();
+
+    // Gather all months from projects
+    projectData.forEach(p => {
+      const d = p.project_start;
+      const mk = (d && String(d).trim()) ? String(d).slice(0, 7) : '__unscheduled__';
+      monthKeysSet.add(mk);
+    });
+
+    // Gather all months from office expenses
+    Object.keys(expsByMonth).forEach(mk => monthKeysSet.add(mk));
+
+    // Filter months by officeYear if isolated year filter is active
+    let monthKeysArray = Array.from(monthKeysSet);
+    if (officeYear !== 'All') {
+      monthKeysArray = monthKeysArray.filter(mk => mk.startsWith(officeYear) || mk === '__unscheduled__');
     }
-    // Add unscheduled / no month
-    allMonths.push({ mk: '__unscheduled__', label: 'NO MONTHS' });
+
+    const monthsNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const allMonths = monthKeysArray.map(mk => {
+      if (mk === '__unscheduled__') return { mk, label: 'NO MONTHS' };
+      const [y, m] = mk.split('-');
+      const mIdx = parseInt(m, 10) - 1;
+      return { mk, label: `${monthsNames[mIdx] ? monthsNames[mIdx].toUpperCase() : 'UNK'}` };
+    });
+
+    // Sort chronologically (oldest to newest, unscheduled at the bottom)
+    allMonths.sort((a, b) => {
+      if (a.mk === '__unscheduled__') return 1;
+      if (b.mk === '__unscheduled__') return -1;
+      return a.mk.localeCompare(b.mk);
+    });
 
     const rows = [];
     allMonths.forEach(({ mk, label }) => {
@@ -755,7 +800,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       // Hide empty months
       const dynamicExpensesSum = Object.values(exps).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
       if (projs.length === 0 && dynamicExpensesSum === 0) {
-        return; 
+        return;
       }
 
       rows.push({
@@ -772,7 +817,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
           project_code: p.project_code,
           project_name: p.project_name,
           monthKey: mk,
-          monthLabel: null, 
+          monthLabel: null,
           TCC: p.TCC || 0,
           CONTRACT_WO_VAT: p.CONTRACT_WO_VAT || 0,
           CONTRACT_WO_VAT_OH_PM: p.CONTRACT_WO_VAT_OH_PM || 0,
@@ -815,7 +860,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
     });
 
     return rows;
-  }, [projectData, filteredDisbursements, overheadProjects, customColumns]);
+  }, [projectData, filteredDisbursements, overheadProjects, customColumns, officeYear]);
 
   const summaryCards = [
     { title: "Active Projects", value: `${projectData.length} Sites`, icon: <Briefcase size={28} />, colorClass: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-800" },
@@ -840,43 +885,45 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
         </div>
 
         {/* DATE FILTER */}
-        <div className="flex items-center bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-sm gap-2 w-fit">
-          <div className="p-2 bg-white dark:bg-slate-900 rounded-xl shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-800">
-            <Calendar size={20} />
-          </div>
-          <div className="flex items-center gap-3 px-2">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Date From</span>
-              <input
-                type="date"
-                value={startDate}
-                max={endDate}
-                onChange={e => setStartDate(e.target.value)}
-                className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer dark:[color-scheme:dark]"
-              />
+        {activeView !== 'office' && (
+          <div className="flex items-center bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-sm gap-2 w-fit">
+            <div className="p-2 bg-white dark:bg-slate-900 rounded-xl shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-800">
+              <Calendar size={20} />
             </div>
-            <span className="text-slate-300 dark:text-slate-600 font-black mt-2">-</span>
-            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Date To</span>
-              <input
-                type="date"
-                value={endDate}
-                min={startDate}
-                onChange={e => setEndDate(e.target.value)}
-                className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer dark:[color-scheme:dark]"
-              />
+            <div className="flex items-center gap-3 px-2">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Date From</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  max={endDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer dark:[color-scheme:dark]"
+                />
+              </div>
+              <span className="text-slate-300 dark:text-slate-600 font-black mt-2">-</span>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Date To</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  min={startDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer dark:[color-scheme:dark]"
+                />
+              </div>
             </div>
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors ml-1"
+                title="Clear Filter"
+              >
+                <X size={18} />
+              </button>
+            )}
           </div>
-          {(startDate || endDate) && (
-            <button
-              onClick={() => { setStartDate(''); setEndDate(''); }}
-              className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors ml-1"
-              title="Clear Filter"
-            >
-              <X size={18} />
-            </button>
-          )}
-        </div>
+        )}
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -1344,6 +1391,20 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                  {/* ISOLATED OFFICE YEAR FILTER */}
+                  <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-xl border border-white/20">
+                    <Calendar size={14} className="text-white/80 ml-1" />
+                    <select
+                      value={officeYear}
+                      onChange={(e) => setOfficeYear(e.target.value)}
+                      className="bg-slate-800 dark:bg-slate-900 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none cursor-pointer border border-white/10"
+                    >
+                      <option value="All">All Years</option>
+                      {availableYears.map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
                   {/* Excel Export */}
                   <div className="relative group">
                     <button onClick={downloadOfficeExcel} disabled={isExportingOfficeExcel}
@@ -1384,11 +1445,10 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       <button
                         key={code}
                         onClick={() => toggleProjectSelection(code)}
-                        className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors ${
-                          overheadProjects.includes(code)
+                        className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors ${overheadProjects.includes(code)
                             ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700'
                             : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-                        }`}
+                          }`}
                       >
                         {code}
                       </button>
@@ -1444,15 +1504,14 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
 
                       {/* Dynamic Expense cols — amber group */}
                       {customColumns.map((col, idx) => (
-                        <th 
-                          key={col.id} 
+                        <th
+                          key={col.id}
                           onClick={() => {
                             setEditingColumn(col);
                             setIsColumnModalOpen(true);
                           }}
-                          className={`p-3 text-center bg-amber-50 dark:bg-amber-900/5 hover:bg-amber-100 dark:hover:bg-amber-900/20 cursor-pointer transition-colors group border-r ${
-                            idx === customColumns.length - 1 ? 'border-amber-200 dark:border-amber-700' : 'border-amber-100 dark:border-amber-900/50'
-                          }`}
+                          className={`p-3 text-center bg-amber-50 dark:bg-amber-900/5 hover:bg-amber-100 dark:hover:bg-amber-900/20 cursor-pointer transition-colors group border-r ${idx === customColumns.length - 1 ? 'border-amber-200 dark:border-amber-700' : 'border-amber-100 dark:border-amber-900/50'
+                            }`}
                           title="Click to configure column mappings"
                         >
                           <div className="flex items-center justify-center gap-1">
@@ -1526,7 +1585,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                               let cellClass = "p-3 text-right font-mono text-amber-600 dark:text-amber-500 border-r border-amber-100 dark:border-amber-800/40";
                               if (isFirst) cellClass = "p-3 text-right font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-900/10 border-r border-amber-100 dark:border-amber-800/40";
                               if (isLast) cellClass = "p-3 text-right font-mono font-bold text-amber-700 dark:text-amber-400 border-r border-amber-200 dark:border-amber-700";
-                              
+
                               return (
                                 <td key={col.id} className={cellClass}>
                                   {fmtExp(val)}
@@ -1536,11 +1595,10 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
 
                             {/* ── Summary cols ── */}
                             <td className="p-3 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-900/10 border-r border-emerald-100 dark:border-emerald-800/40">{fmt(row.total_specific_expenses)}</td>
-                            <td className={`p-3 text-right font-mono font-black ${
-                              row.NET_PROFIT >= 0
+                            <td className={`p-3 text-right font-mono font-black ${row.NET_PROFIT >= 0
                                 ? 'text-emerald-600 dark:text-emerald-400'
                                 : 'text-rose-600 dark:text-rose-400'
-                            } bg-emerald-50/30 dark:bg-emerald-900/5`}>{fmt(row.NET_PROFIT)}</td>
+                              } bg-emerald-50/30 dark:bg-emerald-900/5`}>{fmt(row.NET_PROFIT)}</td>
                           </tr>
                         );
                       }
@@ -1588,11 +1646,10 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                           <td className="p-3 text-right font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-900/5 border-r border-emerald-100 dark:border-emerald-800/40">
                             {row.total_specific_expenses > 0 ? fmt(row.total_specific_expenses) : dash}
                           </td>
-                          <td className={`p-3 text-right font-mono font-bold ${
-                            row.NET_PROFIT >= 0
+                          <td className={`p-3 text-right font-mono font-bold ${row.NET_PROFIT >= 0
                               ? 'text-emerald-600 dark:text-emerald-400'
                               : 'text-rose-600 dark:text-rose-400'
-                          } bg-emerald-50/10 dark:bg-emerald-900/5`}>
+                            } bg-emerald-50/10 dark:bg-emerald-900/5`}>
                             {fmt(row.NET_PROFIT)}
                           </td>
                         </tr>
@@ -1617,20 +1674,20 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                 <Settings size={20} className="text-amber-600" />
                 Configure Column
               </h2>
-              <button 
+              <button
                 onClick={() => setIsColumnModalOpen(false)}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-5">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Column Title</label>
-                <input 
-                  type="text" 
-                  value={editingColumn.title} 
+                <input
+                  type="text"
+                  value={editingColumn.title}
                   onChange={(e) => setEditingColumn({ ...editingColumn, title: e.target.value })}
                   className="px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
                 />
@@ -1639,20 +1696,20 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Mapped Categories</label>
                 <p className="text-[10px] text-slate-500 mb-2 leading-tight">Select which expenses will be aggregated into this column. This relies on exact matches or partial text matches to the project setup categories.</p>
-                
+
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 max-h-[300px] overflow-y-auto custom-scrollbar p-2 flex flex-col gap-1">
                   {categories.map((cat, i) => {
                     // For safety, fallback to string if categories array contains strings
                     const catName = typeof cat === 'string' ? cat : cat.name;
                     const isSelected = editingColumn.mappedCategories.includes(catName);
-                    
+
                     return (
                       <label key={i} className="flex items-center gap-3 p-2 hover:bg-white dark:hover:bg-slate-700/50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={isSelected}
                           onChange={() => {
-                            const newMapping = isSelected 
+                            const newMapping = isSelected
                               ? editingColumn.mappedCategories.filter(c => c !== catName)
                               : [...editingColumn.mappedCategories, catName];
                             setEditingColumn({ ...editingColumn, mappedCategories: newMapping });
@@ -1663,15 +1720,18 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       </label>
                     );
                   })}
-                  
-                  {/* Allow adding custom text just in case the legacy data has categories not in the DB */}
+
+                  {/* Show all currently selected categories and keywords */}
                   <div className="p-2 border-t border-slate-200 dark:border-slate-700 mt-2 flex flex-col gap-2">
-                    <span className="text-xs font-medium text-slate-500">Legacy / Custom Keywords:</span>
+                    <span className="text-xs font-medium text-slate-500">Selected Categories / Keywords:</span>
                     <div className="flex flex-wrap gap-2">
-                      {editingColumn.mappedCategories.filter(mc => !categories.find(c => (typeof c === 'string' ? c : c.name) === mc)).map(customKw => (
-                        <div key={customKw} className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded flex items-center gap-1 border border-amber-200 dark:border-amber-800">
-                          {customKw}
-                          <button onClick={() => setEditingColumn({ ...editingColumn, mappedCategories: editingColumn.mappedCategories.filter(c => c !== customKw) })} className="hover:text-amber-900 dark:hover:text-amber-200">
+                      {editingColumn.mappedCategories.length === 0 && (
+                        <span className="text-[10px] text-slate-400 italic">No categories selected.</span>
+                      )}
+                      {editingColumn.mappedCategories.map(kw => (
+                        <div key={kw} className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded flex items-center gap-1 border border-amber-200 dark:border-amber-800">
+                          {kw}
+                          <button onClick={() => setEditingColumn({ ...editingColumn, mappedCategories: editingColumn.mappedCategories.filter(c => c !== kw) })} className="hover:text-amber-900 dark:hover:text-amber-200">
                             <X size={10} />
                           </button>
                         </div>
@@ -1683,13 +1743,13 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
             </div>
 
             <div className="p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-3">
-              <button 
+              <button
                 onClick={() => setIsColumnModalOpen(false)}
                 className="px-5 py-2 font-bold text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={saveColumnConfig}
                 className="px-6 py-2 font-bold text-sm text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95"
               >
