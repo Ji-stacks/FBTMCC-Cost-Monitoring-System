@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Plus, Trash2, FileText, ChevronDown, Filter, X, Lock, Save, Receipt, Edit2, ZoomIn, ZoomOut, RotateCcw, CheckCircle2, Paperclip, Camera, FileImage, FileType, Loader2, ExternalLink, Download } from 'lucide-react';
+import { Search, Plus, Trash2, FileText, ChevronDown, Filter, X, Lock, Save, Receipt, Edit2, ZoomIn, ZoomOut, RotateCcw, CheckCircle2, Paperclip, Camera, FileImage, FileType, Loader2, ExternalLink, Download, Check } from 'lucide-react';
 import SearchableDropdown from './SearchableDropdown';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import HealthCard from './HealthCard';
@@ -2360,23 +2360,31 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
                     {!isStockAllocationMode && (
                       <>
-                        {/* STOCKS OPT-IN CHECKBOX */}
+                        {/* STOCKS OPT-IN TOGGLE */}
                         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-colors duration-300">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              id="add-stocks-checkbox"
-                              className="w-4.5 h-4.5 text-blue-600 border-slate-300 dark:border-slate-600 rounded focus:ring-blue-500 cursor-pointer"
-                              checked={isAddStocksChecked}
-                              onChange={(e) => {
-                                setIsAddStocksChecked(e.target.checked);
-                                if (!e.target.checked) setStocksList([{ amount: '', description: '' }]);
-                              }}
-                            />
-                            <label htmlFor="add-stocks-checkbox" className="text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
-                              Add Stocks
-                            </label>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextState = !isAddStocksChecked;
+                              setIsAddStocksChecked(nextState);
+                              if (!nextState) setStocksList([{ amount: '', description: '' }]);
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors border ${
+                              isAddStocksChecked
+                                ? 'bg-blue-600 border-blue-600 text-white dark:bg-blue-500 dark:border-blue-500 dark:text-white shadow-sm'
+                                : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300 dark:bg-blue-900/20 dark:border-blue-800/50 dark:text-blue-400 dark:hover:bg-blue-900/40'
+                            }`}
+                          >
+                            {isAddStocksChecked ? (
+                              <>
+                                <Check size={16} /> Stocks Added
+                              </>
+                            ) : (
+                              <>
+                                <Plus size={16} /> Add Stocks
+                              </>
+                            )}
+                          </button>
                           <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded font-black uppercase tracking-wider">
                             Inventory Link
                           </span>
