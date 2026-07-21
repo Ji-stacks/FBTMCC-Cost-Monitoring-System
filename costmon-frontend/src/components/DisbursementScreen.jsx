@@ -72,6 +72,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [showStockWarning, setShowStockWarning] = useState(false);
   const [isMonitoringOnly, setIsMonitoringOnly] = useState(false);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
   const [isAddingLine, setIsAddingLine] = useState(false);
@@ -1025,6 +1026,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setErrorMessage('');
+    setHasAttemptedSubmit(true);
 
     // --- MONITORING DRAFT MODE: bypass all field & balance checks ---
     if (isMonitoringOnly) {
@@ -1232,7 +1234,6 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         return s.description && s.description.trim() !== '' && rawAmt <= 0;
       });
       if (hasEmptyStockAmount) {
-        setErrorMessage("Please enter a valid amount for all added stocks, or remove the empty row.");
         return;
       }
     }
@@ -1248,7 +1249,6 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     });
 
     if (hasEmptyCosting) {
-      setErrorMessage("Please enter a valid amount for all selected categories, or remove the empty row.");
       return;
     }
 
@@ -2313,8 +2313,15 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         <div className="w-36 relative mt-1">
                                           <span className="absolute left-2.5 top-2 text-slate-400 dark:text-slate-500 text-sm font-medium">₱</span>
                                           <input type="text" placeholder="0.00"
-                                            className="w-full pl-7 p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-right text-slate-800 dark:text-white transition-colors"
+                                            className={`w-full pl-7 p-2 border rounded-md text-sm font-bold focus:ring-2 outline-none text-right transition-colors ${
+                                              hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0
+                                                ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
+                                                : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white focus:ring-blue-500 dark:focus:ring-blue-400'
+                                            }`}
                                             value={line.amount} onChange={(e) => handleLineChange(group.id, line.id, 'amount', e.target.value, 'construction')} />
+                                          {hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0 && (
+                                            <p className="text-xs text-red-500 mt-1">Amount required</p>
+                                          )}
                                         </div>
                                         <button type="button" onClick={() => removeLine(group.id, line.id, 'construction')}
                                           disabled={group.constructionLines.length + group.miscLines.length <= 1}
@@ -2361,8 +2368,15 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         <div className="w-36 relative mt-1">
                                           <span className="absolute left-2.5 top-2 text-slate-400 dark:text-slate-500 text-sm font-medium">₱</span>
                                           <input type="text" placeholder="0.00"
-                                            className="w-full pl-7 p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-right text-slate-800 dark:text-white transition-colors"
+                                            className={`w-full pl-7 p-2 border rounded-md text-sm font-bold focus:ring-2 outline-none text-right transition-colors ${
+                                              hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0
+                                                ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
+                                                : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white focus:ring-blue-500 dark:focus:ring-blue-400'
+                                            }`}
                                             value={line.amount} onChange={(e) => handleLineChange(group.id, line.id, 'amount', e.target.value, 'misc')} />
+                                          {hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0 && (
+                                            <p className="text-xs text-red-500 mt-1">Amount required</p>
+                                          )}
                                         </div>
                                         <button type="button" onClick={() => removeLine(group.id, line.id, 'misc')}
                                           className="p-2 mt-1 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
@@ -2437,7 +2451,11 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                       <input
                                         type="text"
                                         placeholder="0.00"
-                                        className="w-full pl-7 p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                                        className={`w-full pl-7 p-2.5 border rounded-md text-sm font-bold focus:ring-2 outline-none transition-colors ${
+                                          hasAttemptedSubmit && stock.description && stock.description.trim() !== '' && (parseFloat(String(stock.amount).replace(/,/g, '')) || 0) <= 0
+                                            ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
+                                            : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white focus:ring-blue-500 dark:focus:ring-blue-400'
+                                        }`}
                                         value={stock.amount}
                                         onChange={(e) => {
                                           let val = e.target.value.replace(/[^0-9.]/g, '');
@@ -2454,6 +2472,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         }}
                                         required
                                       />
+                                      {hasAttemptedSubmit && stock.description && stock.description.trim() !== '' && (parseFloat(String(stock.amount).replace(/,/g, '')) || 0) <= 0 && (
+                                        <p className="text-xs text-red-500 mt-1">Amount required</p>
+                                      )}
                                     </div>
                                   </div>
                                   <div className="space-y-1">
