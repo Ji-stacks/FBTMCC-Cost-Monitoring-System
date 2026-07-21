@@ -25,6 +25,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   // Hidden Projects State
   const [hiddenProjects, setHiddenProjects] = useState([]);
   const [hiddenMonths, setHiddenMonths] = useState([]);
+  const [hiddenAnalyticsProjects, setHiddenAnalyticsProjects] = useState([]);
 
   // Fetch preferences on mount
   useEffect(() => {
@@ -41,6 +42,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
           if (data.dashboard_overhead_projects) setOverheadProjects(data.dashboard_overhead_projects);
           if (data.dashboard_hidden_projects) setHiddenProjects(data.dashboard_hidden_projects);
           if (data.dashboard_hidden_months) setHiddenMonths(data.dashboard_hidden_months);
+          if (data.dashboard_hidden_analytics_projects) setHiddenAnalyticsProjects(data.dashboard_hidden_analytics_projects);
         }
       } catch (err) {
         console.error("Failed to fetch preferences", err);
@@ -112,6 +114,23 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       }).catch(console.error);
     }
   };
+
+  const toggleAnalyticsProjectVisibility = (code) => {
+    const updated = hiddenAnalyticsProjects.includes(code)
+      ? hiddenAnalyticsProjects.filter(p => p !== code)
+      : [...hiddenAnalyticsProjects, code];
+    setHiddenAnalyticsProjects(updated);
+
+    const token = sessionStorage.getItem('fbtmcc_token');
+    if (token) {
+      fetch(`${API_URL}/users/preferences`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dashboard_hidden_analytics_projects: updated })
+      }).catch(console.error);
+    }
+  };
+
 
   // State para i-toggle ang Additional Works breakdown columns
   const [showAdditionalWorks, setShowAdditionalWorks] = useState(true);
@@ -191,7 +210,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       setIsExportingExcel(true);
       
       const payload = {
-        projectData,
+        projectData: analyticsProjectData,
         dateFilterLabel
       };
 
@@ -618,6 +637,10 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
       totalCompanyExpenses: totalExp
     };
   }, [projects, filteredDisbursements, customColumns]);
+
+  const analyticsProjectData = useMemo(() => {
+    return projectData.filter(p => !hiddenAnalyticsProjects.includes(p.project_code));
+  }, [projectData, hiddenAnalyticsProjects]);
 
   // ================================================================
   // MONTHLY TABLE ROWS
@@ -1099,6 +1122,41 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                 {/* CONTROLS AREA */}
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
 
+                  {/* HIDDEN ITEMS DROPDOWN (ANALYTICS) */}
+                  {hiddenAnalyticsProjects.length > 0 && (
+                    <div className="relative group/hidden z-50">
+                      <button className="flex items-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-100 p-1.5 px-3 rounded-xl border border-rose-500/20 transition-colors">
+                        <EyeOff size={14} />
+                        <span className="text-xs font-bold">Hidden ({hiddenAnalyticsProjects.length})</span>
+                      </button>
+                      <div className="absolute right-0 top-[calc(100%+0.5rem)] w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 opacity-0 invisible group-hover/hidden:opacity-100 group-hover/hidden:visible transition-all z-50 overflow-hidden flex flex-col">
+                        <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Hidden Projects</span>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-1.5 flex flex-col gap-1">
+                          {hiddenAnalyticsProjects.map(code => {
+                            const found = projects.find(p => p.project_code === code);
+                            const name = found ? found.project_name : code;
+                            return (
+                              <div key={code} className="flex items-center justify-between px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg group/item transition-colors">
+                                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate pr-2">
+                                  {code}
+                                </span>
+                                <button 
+                                  onClick={() => toggleAnalyticsProjectVisibility(code)}
+                                  className="text-slate-400 hover:text-emerald-500 opacity-0 group-hover/item:opacity-100 transition-opacity p-1 bg-white dark:bg-slate-800 rounded shadow-sm border border-slate-200 dark:border-slate-600 shrink-0"
+                                  title="Unhide Project"
+                                >
+                                  <Eye size={14} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* EXCEL EXPORT (STYLED) */}
                   <button onClick={downloadProjectExcel} disabled={isExportingExcel}
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-colors font-bold text-sm shadow-sm">
@@ -1194,7 +1252,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-[12px]">
-                    {projectData.map(p => {
+                    {analyticsProjectData.map(p => {
                       const adds = p.additionalExpensesList || [];
 
                       const rowsToRender = showAdditionalWorks
@@ -1214,8 +1272,19 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
 
                             return (
                               <tr key={`${p.id}-row-${index}`} className={`hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${!isLastRow ? 'border-b-0' : 'border-b dark:border-slate-800'}`}>
-                                <td className="p-4 font-black text-indigo-600 dark:text-indigo-400 sticky left-0 z-10 bg-white dark:bg-[#0a0a0a] border-r dark:border-slate-800">
-                                  {isFirst ? p.project_code : ''}
+                                <td className="p-4 font-black text-indigo-600 dark:text-indigo-400 sticky left-0 z-10 bg-white dark:bg-[#0a0a0a] border-r dark:border-slate-800 group/row">
+                                  {isFirst ? (
+                                    <div className="flex items-center justify-between">
+                                      <span>{p.project_code}</span>
+                                      <button 
+                                        onClick={() => toggleAnalyticsProjectVisibility(p.project_code)}
+                                        className="text-slate-400 hover:text-rose-500 opacity-0 group-hover/row:opacity-100 transition-opacity p-0.5 rounded"
+                                        title="Hide Project"
+                                      >
+                                        <EyeOff size={14} />
+                                      </button>
+                                    </div>
+                                  ) : ''}
                                 </td>
                                 <td className="p-4 font-bold text-slate-800 dark:text-slate-200 sticky left-[80px] z-10 bg-white dark:bg-[#0a0a0a] border-r dark:border-slate-800">
                                   {isFirst ? p.project_name : ''}
