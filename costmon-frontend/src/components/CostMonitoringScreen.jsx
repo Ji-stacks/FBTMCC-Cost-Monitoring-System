@@ -360,11 +360,11 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
 
           const amount = parseFloat(exp.amount) || 0;
           const isLabor = catUpper.includes('LABOR');
-          
+
           const laborLess = isLabor ? amount : 0;
           const laborTotal = isLabor ? amount / 0.98 : 0;
           const laborEwt = isLabor ? laborTotal - laborLess : 0;
-          
+
           const matlTotal = isLabor ? 0 : amount;
           const totalMatlCost = isLabor ? 0 : amount;
           const totalLaborCost = isLabor ? laborTotal : 0;
@@ -432,11 +432,11 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
           const amount = parseFloat(exp.amount) || 0;
           const catUpper = (exp.category || '').toUpperCase();
           const isLabor = catUpper.includes('LABOR');
-          
+
           const laborLess = isLabor ? amount : 0;
           const laborTotal = isLabor ? amount / 0.98 : 0;
           const laborEwt = isLabor ? laborTotal - laborLess : 0;
-          
+
           const matlTotal = isLabor ? 0 : amount;
           const totalMatlCost = isLabor ? 0 : amount;
           const totalLaborCost = isLabor ? laborTotal : 0;
@@ -1039,7 +1039,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
       )}
 
       {(isSaving || isSwitching) && (
-        <LoadingOverlay message={isSwitching ? "Switching Project" : "Saving Changes"} subtext={isSwitching ? "Inihahanda ang data..." : "Paki-antay lamang..."} />
+        <LoadingOverlay message={isSwitching ? "Switching Project" : "Saving Changes"} subtext={isSwitching ? "Compiling data..." : "Please wait..."} />
       )}
 
       {/* ADDITIONAL WORKS LEDGER MODAL (FLAT LIST WITH REMOVED EXTRA COLUMNS) */}
@@ -1305,7 +1305,7 @@ function AddAdditionalModal({ isOpen, onClose, project, disbursements, refreshDa
       }
       resetToBlank();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editingAdditionalId]);
   // NOTE: Intentionally NOT including editingData or disbursements in deps.
   // We only want this to fire when the modal opens or the target ID changes,

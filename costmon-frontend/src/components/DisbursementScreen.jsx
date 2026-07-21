@@ -72,6 +72,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [showStockWarning, setShowStockWarning] = useState(false);
   const [isMonitoringOnly, setIsMonitoringOnly] = useState(false);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, action: null, payload: null });
   const [isAddingLine, setIsAddingLine] = useState(false);
@@ -1025,6 +1026,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setErrorMessage('');
+    setHasAttemptedSubmit(true);
 
     // --- MONITORING DRAFT MODE: bypass all field & balance checks ---
     if (isMonitoringOnly) {
@@ -1036,6 +1038,15 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     const isPureStock = totals.totalDebit === 0 && parsedStocksAmt > 0;
 
     if (!canEdit || (totals.totalDebit === 0 && !isPureStock)) return;
+
+    // Validate required header fields before proceeding
+    const cvEmpty = !headerData.cv_no || !headerData.cv_no.trim();
+    const orEmpty = !headerData.or_inv_no || !headerData.or_inv_no.trim();
+    const payeeEmpty = !headerData.payee || !headerData.payee.trim();
+    const particularsEmpty = !headerData.particulars || !headerData.particulars.trim();
+    const dateEmpty = !headerData.date;
+    const projectEmpty = !isPureStock && (!headerData.project_code || headerData.project_code.length === 0);
+    if ((cvEmpty && orEmpty) || payeeEmpty || particularsEmpty || dateEmpty || projectEmpty) return;
 
     if (isPureStock) {
       setShowStockWarning(true);
@@ -1204,7 +1215,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       }
     });
 
-    if (!finalHeaderData.cv_no && !finalHeaderData.or_inv_no) { setErrorMessage("Kailangan ilagay ang CV# o OR/INV#."); return; }
+    if (!finalHeaderData.cv_no && !finalHeaderData.or_inv_no) { return; }
     if (isDuplicateCV) { setErrorMessage("May kaparehas na CV#! Paki-palitan bago i-save."); return; }
     if (isDuplicateOR) { setErrorMessage("May kaparehas na OR/INV#! Paki-palitan bago i-save."); return; }
     const stockAllocationValid = isStockAllocationMode && totals.cib_coh > 0 && totals.cib_coh <= targetCib;
@@ -1227,6 +1238,27 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
         setErrorMessage("Kailangan maglagay ng Stock Description kapag nag-add ng stocks.");
         return;
       }
+      const hasEmptyStockAmount = stocksList.some(s => {
+        const rawAmt = parseFloat(String(s.amount).replace(/,/g, '')) || 0;
+        return s.description && s.description.trim() !== '' && rawAmt <= 0;
+      });
+      if (hasEmptyStockAmount) {
+        return;
+      }
+    }
+
+    const hasEmptyCosting = costingGroups.some(group => {
+      const allLines = [...group.constructionLines, ...group.miscLines];
+      return allLines.some(line => {
+        const cat = line.category ? line.category.trim() : '';
+        const isValidCat = cat !== '' && !cat.toLowerCase().includes('select');
+        const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
+        return isValidCat && rawAmt <= 0;
+      });
+    });
+
+    if (hasEmptyCosting) {
+      return;
     }
 
     const numProjects = finalProjectCodes.length;
@@ -2038,8 +2070,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Payee {!isMonitoringOnly && <span className="text-red-500">*</span>}</label>
-                      <input type="text" name="payee" placeholder="Name of Payee" className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none font-medium text-slate-800 dark:text-white transition-colors"
+                      <input type="text" name="payee" placeholder="Name of Payee"
+                        className={`w-full p-2 bg-white dark:bg-slate-700 border rounded-md text-sm focus:ring-2 outline-none font-medium text-slate-800 dark:text-white transition-colors ${hasAttemptedSubmit && !isMonitoringOnly && !headerData.payee?.trim() ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'border-slate-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400'}`}
                         value={headerData.payee} onChange={handleHeaderChange} required={!isMonitoringOnly} />
+                      {hasAttemptedSubmit && !isMonitoringOnly && !headerData.payee?.trim() && (
+                        <span className="text-xs text-red-500 mt-1">This field is required</span>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Project Code (#) <span className="text-red-500">*</span></label>
@@ -2048,12 +2084,20 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         value={headerData.project_code}
                         onChange={(val) => handleHeaderChange({ target: { name: 'project_code', value: val } })}
                         placeholder="-- Search for Project Code --"
+                        hasError={hasAttemptedSubmit && !isMonitoringOnly && (!headerData.project_code || headerData.project_code.length === 0)}
                       />
+                      {hasAttemptedSubmit && !isMonitoringOnly && (!headerData.project_code || headerData.project_code.length === 0) && (
+                        <span className="text-xs text-red-500 mt-1">This field is required</span>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Date {!isMonitoringOnly && <span className="text-red-500">*</span>}</label>
-                      <input type="date" name="date" className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                      <input type="date" name="date"
+                        className={`w-full p-2 bg-white dark:bg-slate-700 border rounded-md text-sm focus:ring-2 outline-none text-slate-800 dark:text-white transition-colors ${hasAttemptedSubmit && !isMonitoringOnly && !headerData.date ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'border-slate-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400'}`}
                         value={headerData.date} onChange={handleHeaderChange} required={!isMonitoringOnly} />
+                      {hasAttemptedSubmit && !isMonitoringOnly && !headerData.date && (
+                        <span className="text-xs text-red-500 mt-1">This field is required</span>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className={`text-xs font-semibold flex items-center justify-between ${isStockAllocationMode ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
@@ -2066,10 +2110,13 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         inputMode="text"
                         pattern="[0-9\-]*"
                         placeholder="Unique CV#"
-                        className={`w-full p-2 rounded-md text-sm outline-none font-bold transition-all duration-200 ${isDuplicateCV
-                          ? 'border-2 border-red-500 dark:border-red-400 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 focus:ring-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
-                          : 'border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-amber-50 dark:bg-amber-900/10 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400'
-                          }`}
+                        className={`w-full p-2 rounded-md text-sm outline-none font-bold transition-all duration-200 ${
+                          isDuplicateCV
+                            ? 'border-2 border-red-500 dark:border-red-400 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 focus:ring-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
+                            : hasAttemptedSubmit && !headerData.cv_no?.trim() && !headerData.or_inv_no?.trim()
+                              ? 'border border-red-500 bg-red-50 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-red-500'
+                              : 'border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-amber-50 dark:bg-amber-900/10 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400'
+                        }`}
                         value={headerData.cv_no}
                         onChange={(e) => {
                           const onlyNums = e.target.value.replace(/[^0-9-]/g, '');
@@ -2081,12 +2128,19 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                           <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> This CV# is already in use!
                         </p>
                       )}
+                      {hasAttemptedSubmit && !isDuplicateCV && !headerData.cv_no?.trim() && !headerData.or_inv_no?.trim() && (
+                        <span className="text-xs text-red-500 mt-1">Either CV# or OR/INV# is required</span>
+                      )}
                     </div>
 
                     <div className="space-y-1 md:col-span-2">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Particulars (Description) {!isMonitoringOnly && <span className="text-red-500">*</span>}</label>
-                      <input type="text" name="particulars" placeholder="Details..." className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                      <input type="text" name="particulars" placeholder="Details..."
+                        className={`w-full p-2 bg-white dark:bg-slate-700 border rounded-md text-sm focus:ring-2 outline-none text-slate-800 dark:text-white transition-colors ${hasAttemptedSubmit && !isMonitoringOnly && !headerData.particulars?.trim() ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'border-slate-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400'}`}
                         value={headerData.particulars} onChange={handleHeaderChange} required={!isMonitoringOnly} />
+                      {hasAttemptedSubmit && !isMonitoringOnly && !headerData.particulars?.trim() && (
+                        <span className="text-xs text-red-500 mt-1">This field is required</span>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">TIN</label>
@@ -2099,10 +2153,13 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         <span>OR / INV # <span className="text-blue-500 font-bold">* (At least one)</span></span>
                       </label>
                       <input type="text" name="or_inv_no" placeholder="Receipt No."
-                        className={`w-full p-2 rounded-md text-sm outline-none font-bold transition-all duration-200 ${isDuplicateOR
-                          ? 'border-2 border-red-500 dark:border-red-400 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 focus:ring-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
-                          : 'border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400'
-                          }`}
+                        className={`w-full p-2 rounded-md text-sm outline-none font-bold transition-all duration-200 ${
+                          isDuplicateOR
+                            ? 'border-2 border-red-500 dark:border-red-400 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 focus:ring-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
+                            : hasAttemptedSubmit && !headerData.cv_no?.trim() && !headerData.or_inv_no?.trim()
+                              ? 'border border-red-500 bg-red-50 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-red-500'
+                              : 'border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400'
+                        }`}
                         value={headerData.or_inv_no}
                         onChange={handleHeaderChange}
                       />
@@ -2110,6 +2167,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                         <p className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1 animate-in slide-in-from-top-1">
                           <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> This OR/INV# is already in use!
                         </p>
+                      )}
+                      {hasAttemptedSubmit && !isDuplicateOR && !headerData.cv_no?.trim() && !headerData.or_inv_no?.trim() && (
+                        <span className="text-xs text-red-500 mt-1">Either CV# or OR/INV# is required</span>
                       )}
                     </div>
 
@@ -2290,8 +2350,15 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         <div className="w-36 relative mt-1">
                                           <span className="absolute left-2.5 top-2 text-slate-400 dark:text-slate-500 text-sm font-medium">₱</span>
                                           <input type="text" placeholder="0.00"
-                                            className="w-full pl-7 p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-right text-slate-800 dark:text-white transition-colors"
+                                            className={`w-full pl-7 p-2 border rounded-md text-sm font-bold focus:ring-2 outline-none text-right transition-colors ${
+                                              hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0
+                                                ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
+                                                : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white focus:ring-blue-500 dark:focus:ring-blue-400'
+                                            }`}
                                             value={line.amount} onChange={(e) => handleLineChange(group.id, line.id, 'amount', e.target.value, 'construction')} />
+                                          {hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0 && (
+                                            <p className="text-xs text-red-500 mt-1">Amount required</p>
+                                          )}
                                         </div>
                                         <button type="button" onClick={() => removeLine(group.id, line.id, 'construction')}
                                           disabled={group.constructionLines.length + group.miscLines.length <= 1}
@@ -2338,8 +2405,15 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         <div className="w-36 relative mt-1">
                                           <span className="absolute left-2.5 top-2 text-slate-400 dark:text-slate-500 text-sm font-medium">₱</span>
                                           <input type="text" placeholder="0.00"
-                                            className="w-full pl-7 p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-right text-slate-800 dark:text-white transition-colors"
+                                            className={`w-full pl-7 p-2 border rounded-md text-sm font-bold focus:ring-2 outline-none text-right transition-colors ${
+                                              hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0
+                                                ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
+                                                : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white focus:ring-blue-500 dark:focus:ring-blue-400'
+                                            }`}
                                             value={line.amount} onChange={(e) => handleLineChange(group.id, line.id, 'amount', e.target.value, 'misc')} />
+                                          {hasAttemptedSubmit && line.category && !line.category.toLowerCase().includes('select') && (parseFloat(String(line.amount).replace(/,/g, '')) || 0) <= 0 && (
+                                            <p className="text-xs text-red-500 mt-1">Amount required</p>
+                                          )}
                                         </div>
                                         <button type="button" onClick={() => removeLine(group.id, line.id, 'misc')}
                                           className="p-2 mt-1 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
@@ -2414,7 +2488,11 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                       <input
                                         type="text"
                                         placeholder="0.00"
-                                        className="w-full pl-7 p-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-bold focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                                        className={`w-full pl-7 p-2.5 border rounded-md text-sm font-bold focus:ring-2 outline-none transition-colors ${
+                                          hasAttemptedSubmit && stock.description && stock.description.trim() !== '' && (parseFloat(String(stock.amount).replace(/,/g, '')) || 0) <= 0
+                                            ? 'border-red-500 bg-red-50 text-red-700 focus:ring-red-500'
+                                            : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white focus:ring-blue-500 dark:focus:ring-blue-400'
+                                        }`}
                                         value={stock.amount}
                                         onChange={(e) => {
                                           let val = e.target.value.replace(/[^0-9.]/g, '');
@@ -2431,6 +2509,9 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                         }}
                                         required
                                       />
+                                      {hasAttemptedSubmit && stock.description && stock.description.trim() !== '' && (parseFloat(String(stock.amount).replace(/,/g, '')) || 0) <= 0 && (
+                                        <p className="text-xs text-red-500 mt-1">Amount required</p>
+                                      )}
                                     </div>
                                   </div>
                                   <div className="space-y-1">
