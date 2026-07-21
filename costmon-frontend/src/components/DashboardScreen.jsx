@@ -83,7 +83,6 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // BAGO: Loading states at Ref para sa Office Exports
-  const [isExportingOfficePDF, setIsExportingOfficePDF] = useState(false);
   const [isExportingOfficeExcel, setIsExportingOfficeExcel] = useState(false);
 
   const projectTableRef = useRef(null);
@@ -270,107 +269,52 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   const downloadOfficeExcel = async () => {
     try {
       setIsExportingOfficeExcel(true);
-      const XLSX = (await import('xlsx')).default;
-      const wb = XLSX.utils.book_new();
-      const excelRows = [];
 
-      excelRows.push(["FBTMCC - MONTHLY UNIFIED MASTER LEDGER"]);
-      excelRows.push([dateFilterLabel ? `Filter Period: ${dateFilterLabel}` : "Period: All-Time Records"]);
-      excelRows.push([]);
+      const params = new URLSearchParams();
 
-      excelRows.push([
-        "Month", "Code",
-        "Contract plus Add'l w/VAT",
-        "Contract w/o Vat",
-        "Contract w/o Vat & Overhead & PM",
-        "Equivalent 30% Overhead, Contingency & PM",
-        "Equivalent 10% Retention base on Contract w/ Vat",
-        "Effective Overhead",
-        "Total EOC per Month",
-        ...customColumns.map(col => col.title),
-        "Total", "Net Profit"
-      ]);
+      // Pass the active year filter
+      if (officeYear) params.append('year', officeYear);
 
-      monthlyTableRows.forEach(row => {
-        const fmt = (v) => (v === null || v === undefined || v === 0) ? '' : v;
-        if (row.rowType === 'month_header') {
-          excelRows.push([
-            row.monthLabel, '', '', '', '', '', '', '', '', ...customColumns.map(() => ''), '', ''
-          ]);
-        } else if (row.rowType === 'project') {
-          excelRows.push([
-            '', // Blank for individual project rows
-            row.project_code,
-            fmt(row.TCC), fmt(row.CONTRACT_WO_VAT), fmt(row.CONTRACT_WO_VAT_OH_PM),
-            fmt(row.EQ_30_OH), fmt(row.EQ_10_RETENTION), fmt(row.EFFECTIVE_OH),
-            '', // Total EOC per Month
-            ...customColumns.map(col => fmt(row[col.id])),
-            fmt(row.total_specific_expenses), fmt(row.NET_PROFIT)
-          ]);
-        } else if (row.rowType === 'monthly_total') {
-          excelRows.push([
-            '', 'MONTHLY TOTAL',
-            fmt(row.TCC), fmt(row.CONTRACT_WO_VAT), fmt(row.CONTRACT_WO_VAT_OH_PM),
-            fmt(row.EQ_30_OH), fmt(row.EQ_10_RETENTION), fmt(row.EFFECTIVE_OH),
-            '',
-            ...customColumns.map(col => fmt(row[col.id])),
-            fmt(row.total_specific_expenses), fmt(row.NET_PROFIT)
-          ]);
-        }
+      // Pass overhead project codes (comma-separated)
+      if (overheadProjects && overheadProjects.length > 0) {
+        params.append('overheadProjects', overheadProjects.join(','));
+      }
+
+      // Pass custom columns config as JSON
+      if (customColumns && customColumns.length > 0) {
+        params.append('customColumns', JSON.stringify(customColumns));
+      }
+
+      const token = sessionStorage.getItem('fbtmcc_token');
+      const response = await fetch(`${API_URL}/office-ledger/export?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
-      const ws = XLSX.utils.aoa_to_sheet(excelRows);
-      XLSX.utils.book_append_sheet(wb, ws, "Monthly Master Ledger");
-      const dateStr = new Date().toISOString().split('T')[0];
-      XLSX.writeFile(wb, `MONTHLY_MASTER_LEDGER_${dateStr}.xlsx`);
+      if (!response.ok) {
+        let errMsg = 'Export failed.';
+        try { const d = await response.json(); errMsg = d.error || errMsg; } catch (_) { }
+        throw new Error(errMsg);
+      }
+
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : `MONTHLY_MASTER_LEDGER_${Date.now()}.xlsx`;
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+
     } catch (error) {
-      console.error("Failed to export Excel file:", error);
+      console.error("Failed to export Office Ledger Excel file:", error);
     } finally {
       setIsExportingOfficeExcel(false);
     }
   };
 
-  // ==========================================
-  // EXPORT TO PDF FUNCTION (OFFICE)
-  // ==========================================
-  const downloadOfficePDF = async () => {
-    if (!officeTableRef.current) return;
 
-    try {
-      setIsExportingOfficePDF(true);
-      const html2canvas = (await import('html2canvas')).default;
-      const { jsPDF } = await import('jspdf');
-
-      const element = officeTableRef.current;
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: document.documentElement.classList.contains('dark') ? '#0a0a0a' : '#ffffff',
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: 2900
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'px',
-        format: [canvas.width, canvas.height]
-      });
-
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-
-      const dateStr = new Date().toISOString().split('T')[0];
-      pdf.save(`OFFICE_MASTER_LEDGER_${dateStr}.pdf`);
-    } catch (error) {
-      console.error("Failed to export PDF:", error);
-    } finally {
-      setIsExportingOfficePDF(false);
-    }
-  };
 
   // ==========================================
   // DATE LABEL FORMATTER (Tinanggal ang useMemo)
@@ -1406,25 +1350,11 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                     </select>
                   </div>
                   {/* Excel Export */}
-                  <div className="relative group">
-                    <button onClick={downloadOfficeExcel} disabled={isExportingOfficeExcel}
-                      className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl transition-all shadow-sm">
-                      <FileSpreadsheet size={16} className={isExportingOfficeExcel ? 'animate-pulse' : ''} />
-                    </button>
-                    <div className="absolute bottom-full mb-2 bg-slate-800 text-white text-[10px] font-bold py-1 px-2 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg border border-slate-700">
-                      {isExportingOfficeExcel ? 'Exporting...' : 'Download Monthly Ledger (.xlsx)'}
-                    </div>
-                  </div>
-                  {/* PDF Export */}
-                  <div className="relative group">
-                    <button onClick={downloadOfficePDF} disabled={isExportingOfficePDF}
-                      className="flex items-center justify-center p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 rounded-xl transition-all shadow-sm">
-                      <Download size={16} className={isExportingOfficePDF ? 'animate-bounce' : ''} />
-                    </button>
-                    <div className="absolute bottom-full mb-2 bg-slate-800 text-white text-[10px] font-bold py-1 px-2 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg border border-slate-700">
-                      {isExportingOfficePDF ? 'Generating PDF...' : 'Download as PDF'}
-                    </div>
-                  </div>
+                  <button onClick={downloadOfficeExcel} disabled={isExportingOfficeExcel}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-colors font-bold text-sm shadow-sm">
+                    <Download size={16} className={isExportingOfficeExcel ? 'animate-pulse' : ''} />
+                    {isExportingOfficeExcel ? 'Exporting...' : 'Export Excel'}
+                  </button>
                   {/* Zoom */}
                   <div className="flex items-center bg-black/20 rounded-xl px-2 py-1 gap-1 backdrop-blur-sm border border-white/10">
                     <button onClick={handleZoomOut} className="p-1 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-30" disabled={zoomLevel <= 0.6}><ZoomOut size={16} /></button>

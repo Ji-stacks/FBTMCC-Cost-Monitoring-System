@@ -1357,6 +1357,505 @@ app.post('/api/db/import', authenticateToken, requireCEO, dbUpload.single('dbFil
 });
 
 // ==========================================
+// OFFICE LEDGER EXCEL EXPORT
+// ==========================================
+// GET /api/office-ledger/export
+// Query params:
+//   year            - e.g. "2026" or "All"
+//   overheadProjects - comma-separated codes e.g. "OFFICE,PAYATAS,RESIDENCE"
+//   customColumns   - JSON array of { id, title, mappedCategories[] }
+app.get('/api/office-ledger/export', authenticateToken, async (req, res) => {
+  try {
+    const { year, overheadProjects: opRaw, customColumns: ccRaw } = req.query;
+
+    // Parse params
+    const overheadProjects = opRaw
+      ? opRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+      : ['OFFICE', 'PAYATAS', 'RESIDENCE'];
+
+    let customColumns = [];
+    try {
+      customColumns = ccRaw ? JSON.parse(ccRaw) : [];
+    } catch (_) {
+      customColumns = [];
+    }
+
+    // ── Fetch all data from DB ────────────────────────────────
+    const [allProjects, allDisbursements] = await Promise.all([
+      new Promise((resolve, reject) =>
+        db.all('SELECT * FROM projects ORDER BY project_code ASC', [], (err, rows) =>
+          err ? reject(err) : resolve(rows)
+        )
+      ),
+      new Promise((resolve, reject) =>
+        db.all('SELECT * FROM disbursements ORDER BY date ASC', [], (err, rows) =>
+          err ? reject(err) : resolve(rows)
+        )
+      )
+    ]);
+
+    // Parse expenses_json
+    const disbursements = allDisbursements.map(d => ({
+      ...d,
+      expenses: d.expenses_json ? (() => { try { return JSON.parse(d.expenses_json); } catch (_) { return []; } })() : []
+    }));
+
+    // ── Apply year filter ─────────────────────────────────────
+    const filtered = year && year !== 'All'
+      ? disbursements.filter(d => d.date && String(d.date).startsWith(year))
+      : disbursements;
+
+    // ── Helper: match category against mapped keywords ────────
+    const matchesCol = (category, mappedCategories) => {
+      const eClean = String(category).toLowerCase().replace(/[^a-z0-9]/g, '');
+      return mappedCategories.some(kw => {
+        const kClean = String(kw).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (!eClean || !kClean) return false;
+        return eClean.includes(kClean) || kClean.includes(eClean);
+      });
+    };
+
+    // ── 1. Compute per-project data (construction projects only) ──
+    const officeProjectCodes = new Set(
+      allProjects.filter(p => p.project_type === 'Office').map(p => p.project_code.toUpperCase())
+    );
+
+    const constructionProjects = allProjects.filter(p => p.project_type !== 'Office');
+
+    const projectData = constructionProjects.map(p => {
+      const projExpenses = filtered.filter(d =>
+        d.project_code && d.project_code.toUpperCase() === p.project_code.toUpperCase()
+      );
+
+      let TAW = 0;
+      projExpenses.filter(d => d.costing_type === 'additional').forEach(d => {
+        (d.expenses || []).forEach(exp => { TAW += parseFloat(exp.amount) || 0; });
+      });
+
+      const CC = parseFloat(p.contract_cost) || 0;
+      const TCC = CC + TAW;
+      const CONTRACT_WO_VAT = TCC / 1.12;
+      const CONTRACT_WO_VAT_OH_PM = CONTRACT_WO_VAT / 1.3;
+      const EQ_30_OH = CONTRACT_WO_VAT_OH_PM * 0.3;
+      const EQ_10_RETENTION = TCC * 0.1;
+      const EFFECTIVE_OH = EQ_30_OH - EQ_10_RETENTION;
+      const NET_PROFIT = EFFECTIVE_OH;
+
+      // Overhead project expenses attributed to this project's month
+      const overheadProjExpenses = filtered.filter(d =>
+        d.project_code && overheadProjects.includes(d.project_code.toUpperCase())
+      );
+
+      let total_specific_expenses = 0;
+      const dynamicExpenses = {};
+      customColumns.forEach(col => {
+        const sum = overheadProjExpenses.reduce((total, d) => {
+          const lineTotal = (d.expenses || [])
+            .filter(e => e.category && matchesCol(e.category, col.mappedCategories))
+            .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+          return total + lineTotal;
+        }, 0);
+        dynamicExpenses[col.id] = sum;
+        total_specific_expenses += sum;
+      });
+
+      const projectMk = (p.project_start && String(p.project_start).trim())
+        ? String(p.project_start).slice(0, 7)
+        : '__unscheduled__';
+
+      return {
+        projectMk,
+        project_code: p.project_code,
+        project_name: p.project_name,
+        TCC, CONTRACT_WO_VAT, CONTRACT_WO_VAT_OH_PM,
+        EQ_30_OH, EQ_10_RETENTION, EFFECTIVE_OH,
+        NET_PROFIT, total_specific_expenses,
+        ...dynamicExpenses
+      };
+    });
+
+    // ── 2. Aggregate overhead expenses by month ───────────────
+    const oprDisb = filtered.filter(d =>
+      d.project_code && overheadProjects.includes(d.project_code.toUpperCase())
+    );
+
+    const expsByMonth = {};
+    oprDisb.forEach(d => {
+      const mk = d.date && String(d.date).trim() ? String(d.date).slice(0, 7) : '__unscheduled__';
+      if (!expsByMonth[mk]) {
+        expsByMonth[mk] = {};
+        customColumns.forEach(col => { expsByMonth[mk][col.id] = 0; });
+      }
+      (d.expenses || []).forEach(e => {
+        if (!e.category) return;
+        customColumns.forEach(col => {
+          if (matchesCol(e.category, col.mappedCategories)) {
+            expsByMonth[mk][col.id] = (expsByMonth[mk][col.id] || 0) + (parseFloat(e.amount) || 0);
+          }
+        });
+      });
+    });
+
+    // ── 3. Gather all month keys ──────────────────────────────
+    const monthKeysSet = new Set();
+    projectData.forEach(p => monthKeysSet.add(p.projectMk));
+    Object.keys(expsByMonth).forEach(mk => monthKeysSet.add(mk));
+
+    let monthKeysArray = Array.from(monthKeysSet);
+    if (year && year !== 'All') {
+      monthKeysArray = monthKeysArray.filter(mk => mk.startsWith(year) || mk === '__unscheduled__');
+    }
+
+    const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const allMonths = monthKeysArray.map(mk => {
+      if (mk === '__unscheduled__') return { mk, label: 'NO DATE' };
+      const [y, m] = mk.split('-');
+      const mIdx = parseInt(m, 10) - 1;
+      return { mk, label: (monthsNames[mIdx] || 'UNK').toUpperCase() };
+    }).sort((a, b) => {
+      if (a.mk === '__unscheduled__') return 1;
+      if (b.mk === '__unscheduled__') return -1;
+      return a.mk.localeCompare(b.mk);
+    });
+
+    // ── 4. Build ExcelJS Workbook ─────────────────────────────
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'FBTMCC Cost Monitoring System';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Monthly Master Ledger', {
+      pageSetup: { paperSize: 9, orientation: 'landscape' }
+    });
+
+    // ── Color / Style constants ───────────────────────────────
+    const INDIGO       = 'FF3730A3'; // header bg
+    const AMBER_LIGHT  = 'FFFFF3CD'; // month header bg
+    const SLATE_LIGHT  = 'FFF1F5F9'; // monthly-total bg
+    const GRAND_BG     = 'FF312E81'; // grand total bg (darker indigo)
+    const WHITE        = 'FFFFFFFF';
+    const GRAY_BORDER  = 'FFD1D5DB';
+    const DARK_TEXT    = 'FF1E293B';
+
+    const thinBorder = {
+      top:    { style: 'thin',  color: { argb: GRAY_BORDER } },
+      left:   { style: 'thin',  color: { argb: GRAY_BORDER } },
+      bottom: { style: 'thin',  color: { argb: GRAY_BORDER } },
+      right:  { style: 'thin',  color: { argb: GRAY_BORDER } }
+    };
+
+    const mediumBorder = {
+      top:    { style: 'medium', color: { argb: INDIGO } },
+      left:   { style: 'medium', color: { argb: INDIGO } },
+      bottom: { style: 'medium', color: { argb: INDIGO } },
+      right:  { style: 'medium', color: { argb: INDIGO } }
+    };
+
+    // Fixed columns + dynamic expense columns + Total + Net Profit
+    const fixedColCount = 9; // Date, Code, TCC, CC_WO_VAT, CC_WO_VAT_OH_PM, EQ_30_OH, EQ_10_RETENTION, EFFECTIVE_OH, Total_EOC
+    const dynamicColCount = customColumns.length;
+    const totalCols = fixedColCount + dynamicColCount + 2; // + Total + Net Profit
+
+    // ── Column widths ─────────────────────────────────────────
+    const colDefs = [
+      { key: 'date',              width: 10 },
+      { key: 'code',              width: 16 },
+      { key: 'TCC',               width: 20 },
+      { key: 'CONTRACT_WO_VAT',   width: 20 },
+      { key: 'CWOV_OH_PM',        width: 22 },
+      { key: 'EQ_30_OH',          width: 22 },
+      { key: 'EQ_10_RET',         width: 24 },
+      { key: 'EFFECTIVE_OH',      width: 20 },
+      { key: 'TOTAL_EOC',         width: 20 },
+      ...customColumns.map(col => ({ key: col.id, width: 18 })),
+      { key: 'total_exp',         width: 18 },
+      { key: 'net_profit',        width: 18 },
+    ];
+
+    colDefs.forEach((col, i) => {
+      const c = sheet.getColumn(i + 1);
+      c.key   = col.key;
+      c.width = col.width;
+    });
+
+    // ── Title rows ────────────────────────────────────────────
+    const title1 = sheet.addRow(['FBTMCC — MONTHLY UNIFIED MASTER LEDGER']);
+    sheet.mergeCells(`A1:${sheet.getColumn(totalCols).letter}1`);
+    title1.getCell(1).font      = { bold: true, size: 14, color: { argb: INDIGO }, name: 'Calibri' };
+    title1.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    title1.height = 24;
+
+    const yearLabel = (year && year !== 'All') ? `Year: ${year}` : 'All Records';
+    const title2 = sheet.addRow([yearLabel]);
+    sheet.mergeCells(`A2:${sheet.getColumn(totalCols).letter}2`);
+    title2.getCell(1).font      = { italic: true, size: 11, color: { argb: 'FF64748B' }, name: 'Calibri' };
+    title2.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    title2.height = 16;
+
+    sheet.addRow([]); // Spacer row 3
+
+    // ── Header Row (Row 4) ────────────────────────────────────
+    const headerLabels = [
+      'Date',
+      'Code',
+      "Contract plus Add'l w/ VAT",
+      'Contract w/o Vat',
+      'Contract w/o Vat & Overhead & PM',
+      'Equivalent 30% Overhead, Contingency & PM',
+      'Equivalent 10% Retention base on Contract w/ Vat',
+      'Effective Overhead',
+      'Total EOC per Month',
+      ...customColumns.map(col => col.title),
+      'Total',
+      'Net Profit'
+    ];
+
+    const headerRow = sheet.addRow(headerLabels);
+    headerRow.eachCell({ includeEmpty: true }, cell => {
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: INDIGO } };
+      cell.font      = { bold: true, color: { argb: WHITE }, size: 10, name: 'Calibri' };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border    = mediumBorder;
+    });
+    headerRow.height = 44;
+    headerRow.commit();
+
+    // Freeze panes below header
+    sheet.views = [{ state: 'frozen', ySplit: 4 }];
+
+    // ── Number format helper ──────────────────────────────────
+    const MONEY_FMT = '#,##0.00';
+
+    // Helper: set em-dash or number value
+    const fmtNum = (v) => (v === null || v === undefined || v === 0) ? '—' : v;
+
+    // Helper: apply cell style for a data cell
+    const styleDataCell = (cell, fill, isNumeric = false, isBold = false, fontColor = DARK_TEXT) => {
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+      cell.font      = { name: 'Calibri', size: 10, color: { argb: fontColor }, bold: isBold };
+      cell.alignment = { vertical: 'middle', wrapText: false };
+      cell.border    = thinBorder;
+      if (isNumeric && typeof cell.value === 'number') {
+        cell.numFmt = MONEY_FMT;
+      }
+    };
+
+    // ── Grand total accumulators ──────────────────────────────
+    const grandTotal = {
+      TCC: 0, CONTRACT_WO_VAT: 0, CONTRACT_WO_VAT_OH_PM: 0,
+      EQ_30_OH: 0, EQ_10_RETENTION: 0, EFFECTIVE_OH: 0,
+      total_specific_expenses: 0, NET_PROFIT: 0
+    };
+    customColumns.forEach(col => { grandTotal[col.id] = 0; });
+
+    // ── Per-month blocks ──────────────────────────────────────
+    let dataRowIndex = 0;
+
+    allMonths.forEach(({ mk, label }) => {
+      const projs = projectData.filter(p => p.projectMk === mk);
+      const exps  = expsByMonth[mk] || {};
+
+      // Compute dynamic expense sum for this month
+      const dynamicExpensesSum = customColumns.reduce((sum, col) => sum + (parseFloat(exps[col.id]) || 0), 0);
+
+      // Skip empty months
+      if (projs.length === 0 && dynamicExpensesSum === 0) return;
+
+      // ── Month Header Row ──────────────────────────────────
+      const mhRow = sheet.addRow([label]);
+      sheet.mergeCells(`A${mhRow.number}:${sheet.getColumn(totalCols).letter}${mhRow.number}`);
+      mhRow.getCell(1).value     = label;
+      mhRow.getCell(1).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: AMBER_LIGHT } };
+      mhRow.getCell(1).font      = { bold: true, size: 11, color: { argb: 'FF78350F' }, name: 'Calibri' };
+      mhRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+      mhRow.getCell(1).border    = {
+        top:    { style: 'medium', color: { argb: 'FFFFFBEB' } },
+        bottom: { style: 'thin',   color: { argb: GRAY_BORDER } },
+        left:   { style: 'thin',   color: { argb: GRAY_BORDER } },
+        right:  { style: 'thin',   color: { argb: GRAY_BORDER } }
+      };
+      mhRow.height = 20;
+      mhRow.commit();
+
+      // ── Per-project rows ──────────────────────────────────
+      projs.forEach((p, idx) => {
+        const rowFill = idx % 2 === 0 ? WHITE : 'FFF8FAFC';
+
+        const values = [
+          '',                            // Date (blank for project rows)
+          p.project_code,               // Code
+          fmtNum(p.TCC),
+          fmtNum(p.CONTRACT_WO_VAT),
+          fmtNum(p.CONTRACT_WO_VAT_OH_PM),
+          fmtNum(p.EQ_30_OH),
+          fmtNum(p.EQ_10_RETENTION),
+          fmtNum(p.EFFECTIVE_OH),
+          fmtNum(p.TCC || null),        // Total EOC per Month ≈ TCC
+          ...customColumns.map(() => '—'),  // Expense cols: n/a for project rows
+          '—',                          // Total (expense total: n/a)
+          fmtNum(p.NET_PROFIT)
+        ];
+
+        const dr = sheet.addRow(values);
+        dr.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          const isNumericCol = colNumber >= 3;
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowFill } };
+          cell.font      = { name: 'Calibri', size: 10, color: { argb: DARK_TEXT } };
+          cell.alignment = { vertical: 'middle', wrapText: false };
+          cell.border    = thinBorder;
+          if (isNumericCol && typeof cell.value === 'number') {
+            cell.numFmt = MONEY_FMT;
+          }
+          // Center code column
+          if (colNumber === 2) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          }
+        });
+        dr.height = 18;
+        dr.commit();
+        dataRowIndex++;
+      });
+
+      // ── Monthly Total Row ─────────────────────────────────
+      const projSums = projs.reduce((acc, p) => {
+        acc.TCC                  += p.TCC || 0;
+        acc.CONTRACT_WO_VAT      += p.CONTRACT_WO_VAT || 0;
+        acc.CONTRACT_WO_VAT_OH_PM += p.CONTRACT_WO_VAT_OH_PM || 0;
+        acc.EQ_30_OH             += p.EQ_30_OH || 0;
+        acc.EQ_10_RETENTION      += p.EQ_10_RETENTION || 0;
+        acc.EFFECTIVE_OH         += p.EFFECTIVE_OH || 0;
+        acc.NET_PROFIT           += p.NET_PROFIT || 0;
+        customColumns.forEach(col => {
+          acc[col.id] = (acc[col.id] || 0); // project rows don't have expense data
+        });
+        return acc;
+      }, {
+        TCC: 0, CONTRACT_WO_VAT: 0, CONTRACT_WO_VAT_OH_PM: 0,
+        EQ_30_OH: 0, EQ_10_RETENTION: 0, EFFECTIVE_OH: 0, NET_PROFIT: 0,
+        ...customColumns.reduce((o, col) => ({ ...o, [col.id]: 0 }), {})
+      });
+
+      // Add expense column sums to monthly total
+      let monthlyExpTotal = 0;
+      customColumns.forEach(col => {
+        projSums[col.id] = (parseFloat(exps[col.id]) || 0);
+        monthlyExpTotal += projSums[col.id];
+      });
+      projSums.total_specific_expenses = monthlyExpTotal;
+      projSums.NET_PROFIT -= dynamicExpensesSum;
+
+      const totalEOC = projSums.TCC; // Total EOC per Month = project TCC sum
+
+      const mtValues = [
+        '',                                           // Date
+        'MONTHLY TOTAL',                             // Code
+        fmtNum(projSums.TCC),
+        fmtNum(projSums.CONTRACT_WO_VAT),
+        fmtNum(projSums.CONTRACT_WO_VAT_OH_PM),
+        fmtNum(projSums.EQ_30_OH),
+        fmtNum(projSums.EQ_10_RETENTION),
+        fmtNum(projSums.EFFECTIVE_OH),
+        fmtNum(totalEOC),
+        ...customColumns.map(col => fmtNum(projSums[col.id])),
+        fmtNum(projSums.total_specific_expenses),
+        fmtNum(projSums.NET_PROFIT)
+      ];
+
+      const mtRow = sheet.addRow(mtValues);
+      mtRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: SLATE_LIGHT } };
+        cell.font   = { name: 'Calibri', size: 10, bold: true, color: { argb: DARK_TEXT } };
+        cell.alignment = { vertical: 'middle', wrapText: false };
+        cell.border = {
+          top:    { style: 'thin',   color: { argb: '99AAAAAA' } },
+          bottom: { style: 'medium', color: { argb: 'FF94A3B8' } },
+          left:   { style: 'thin',   color: { argb: GRAY_BORDER } },
+          right:  { style: 'thin',   color: { argb: GRAY_BORDER } }
+        };
+        if (colNumber >= 3 && typeof cell.value === 'number') {
+          cell.numFmt = MONEY_FMT;
+        }
+        if (colNumber === 2) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+          cell.font = { ...cell.font, color: { argb: 'FF475569' }, italic: true };
+        }
+      });
+      mtRow.height = 20;
+      mtRow.commit();
+
+      // Accumulate grand totals
+      grandTotal.TCC                   += projSums.TCC;
+      grandTotal.CONTRACT_WO_VAT       += projSums.CONTRACT_WO_VAT;
+      grandTotal.CONTRACT_WO_VAT_OH_PM += projSums.CONTRACT_WO_VAT_OH_PM;
+      grandTotal.EQ_30_OH              += projSums.EQ_30_OH;
+      grandTotal.EQ_10_RETENTION       += projSums.EQ_10_RETENTION;
+      grandTotal.EFFECTIVE_OH          += projSums.EFFECTIVE_OH;
+      grandTotal.NET_PROFIT            += projSums.NET_PROFIT;
+      grandTotal.total_specific_expenses += projSums.total_specific_expenses;
+      customColumns.forEach(col => {
+        grandTotal[col.id] = (grandTotal[col.id] || 0) + (projSums[col.id] || 0);
+      });
+    });
+
+    // ── Grand Total Row ───────────────────────────────────────
+    const gtLabel = (year && year !== 'All') ? `YEAR ${year} TOTAL` : 'GRAND TOTAL';
+    const gtValues = [
+      '',
+      gtLabel,
+      fmtNum(grandTotal.TCC),
+      fmtNum(grandTotal.CONTRACT_WO_VAT),
+      fmtNum(grandTotal.CONTRACT_WO_VAT_OH_PM),
+      fmtNum(grandTotal.EQ_30_OH),
+      fmtNum(grandTotal.EQ_10_RETENTION),
+      fmtNum(grandTotal.EFFECTIVE_OH),
+      fmtNum(grandTotal.TCC),
+      ...customColumns.map(col => fmtNum(grandTotal[col.id])),
+      fmtNum(grandTotal.total_specific_expenses),
+      fmtNum(grandTotal.NET_PROFIT)
+    ];
+
+    const gtRow = sheet.addRow(gtValues);
+    gtRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRAND_BG } };
+      cell.font   = { name: 'Calibri', size: 11, bold: true, color: { argb: WHITE } };
+      cell.border = {
+        top:    { style: 'medium', color: { argb: GRAND_BG } },
+        bottom: { style: 'medium', color: { argb: GRAND_BG } },
+        left:   { style: 'medium', color: { argb: GRAND_BG } },
+        right:  { style: 'medium', color: { argb: GRAND_BG } }
+      };
+      cell.alignment = { vertical: 'middle', wrapText: false };
+      if (colNumber >= 3 && typeof cell.value === 'number') {
+        cell.numFmt = MONEY_FMT;
+      }
+      if (colNumber === 2) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+      }
+    });
+    gtRow.height = 24;
+    gtRow.commit();
+
+    // ── Stream file to client ─────────────────────────────────
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const yearSuffix = (year && year !== 'All') ? `_${year}` : '';
+    const filename = `MONTHLY_MASTER_LEDGER${yearSuffix}_${timestamp}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+    logActivity(req.user.username, 'EXPORT_OFFICE_LEDGER', 'office_ledger', 'excel', `Exported Monthly Master Ledger${yearSuffix}`);
+
+  } catch (err) {
+    console.error('Office Ledger export error:', err.message, err.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate Office Ledger Excel file.' });
+    }
+  }
+});
+
+// ==========================================
 // SERVE THE BUILD FRONTEND
 // ==========================================
 
