@@ -331,6 +331,19 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     return result;
   }, [filteredDisbursements]);
 
+  const sortedData = useMemo(() => {
+    return [...groupedDisbursements].sort((a, b) => {
+      const hasCvA = !!a.cv_no;
+      const hasCvB = !!b.cv_no;
+
+      if (!hasCvA && hasCvB) return 1;
+      if (hasCvA && !hasCvB) return -1;
+      if (!hasCvA && !hasCvB) return 0;
+
+      return Number(a.cv_no) - Number(b.cv_no);
+    });
+  }, [groupedDisbursements]);
+
 
   const handleToggleMonth = (val) => {
     setTempSelectedMonths(prev => prev.includes(val) ? prev.filter(m => m !== val) : [...prev, val]);
@@ -1785,7 +1798,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-400 dark:divide-slate-600">
-                {groupedDisbursements.length === 0 ? (
+                {sortedData.length === 0 ? (
                   <tr>
                     <td colSpan={totalVisibleColumns} className="px-8 py-20 text-center">
                       <div className="flex flex-col items-center gap-4">
@@ -1796,7 +1809,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       </div>
                     </td>
                   </tr>
-                ) : groupedDisbursements.map(d => (
+                ) : sortedData.map(d => (
                   <tr
                     key={d.id}
                     className={
@@ -1857,7 +1870,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                   </tr>
                 ))}
               </tbody>
-              {groupedDisbursements.length > 0 && (
+              {sortedData.length > 0 && (
                 <tfoot className="bg-slate-100 dark:bg-slate-800 font-black text-slate-800 dark:text-slate-200 border-t-4 border-slate-400 dark:border-slate-600 transition-colors duration-300">
                   <tr>
                     <td colSpan="5" className="px-6 py-6 text-right text-xs tracking-widest text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-slate-100 dark:bg-slate-800 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">TOTAL SUMMARY:</td>
