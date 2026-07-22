@@ -2319,7 +2319,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                           const usedMiscCategories = group.miscLines.map(item => item.category).filter(Boolean);
 
                           return (
-                            <div key={group.id} className="border-2 border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden shadow-sm animate-in slide-in-from-top-2">
+                            <div key={group.id} className={`border-2 border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden shadow-sm animate-in slide-in-from-top-2 ${groupIndex % 2 === 0 ? 'bg-slate-50 dark:bg-slate-800' : 'bg-blue-50 dark:bg-slate-800/70'}`}>
                               {/* Group Header with Target Selector */}
                               <div className="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-700/60 dark:to-slate-700/30 px-4 py-2.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-600">
                                 <div className="flex items-center gap-3 flex-wrap">
@@ -2353,7 +2353,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                 )}
                               </div>
 
-                              <div className="p-4 space-y-4 bg-white dark:bg-slate-800/50">
+                              <div className="p-4 space-y-4">
                                 {/* Cost Monitoring Breakdown */}
                                 <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors duration-300">
                                   <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
