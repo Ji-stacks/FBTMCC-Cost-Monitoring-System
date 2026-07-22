@@ -319,7 +319,7 @@ app.get('/api/users', authenticateToken, requireCEO, (req, res) => {
 
 app.post('/api/users', authenticateToken, requireCEO, async (req, res) => {
   const { username, password, role, security_question, security_answer } = req.body;
-  if (!username || !password || !role) return res.status(400).json({ error: "Username, password, at role ay kailangan." });
+  if (!username || !password || !role) return res.status(400).json({ error: "Username, password, and role are required." });
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const hashedAnswer = security_answer ? await bcrypt.hash(security_answer.toLowerCase().trim(), 10) : '';
@@ -367,7 +367,7 @@ app.put('/api/users/:id', authenticateToken, requireCEO, async (req, res) => {
 app.put('/api/users/:id/toggle-active', authenticateToken, requireCEO, (req, res) => {
   const userId = req.params.id;
   if (String(req.user.id) === String(userId)) {
-    return res.status(400).json({ error: "Hindi mo maaaring i-deactivate ang sarili mong account." });
+    return res.status(400).json({ error: "You can't deactivate your own account." });
   }
   db.get("SELECT username, is_active FROM users WHERE id=?", [userId], (err, user) => {
     if (err || !user) return res.status(404).json({ error: "User not found." });
@@ -388,7 +388,7 @@ app.put('/api/users/:id/change-own-password', authenticateToken, async (req, res
   db.get("SELECT password FROM users WHERE id=?", [userId], async (err, user) => {
     if (err || !user) return res.status(404).json({ error: "User not found." });
     const match = await bcrypt.compare(currentPassword, user.password);
-    if (!match) return res.status(401).json({ error: "Mali ang kasalukuyang password." });
+    if (!match) return res.status(401).json({ error: "Wrong password." });
     const hashed = await bcrypt.hash(newPassword, 10);
     db.run("UPDATE users SET password=? WHERE id=?", [hashed, userId], (updateErr) => {
       if (updateErr) return res.status(500).json({ error: updateErr.message });
