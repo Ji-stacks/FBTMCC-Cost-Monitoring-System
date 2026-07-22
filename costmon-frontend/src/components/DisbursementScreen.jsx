@@ -108,6 +108,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     bank: '',
     check_no: '',
     or_inv_no: '',
+    po_no: '',
     accts_pay: '',
     input_tax: '',
     output_tax: '',
@@ -434,7 +435,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   }, [categories, filteredDisbursements]);
 
   const totalVisibleColumns = useMemo(() => {
-    return 8 + (isAcctsPayVisible ? 1 : 0) + (isEwtVisible ? 1 : 0) + (isStocksVisible ? 1 : 0) + visibleCategories.length + (canEdit ? 1 : 0);
+    return 9 + (isAcctsPayVisible ? 1 : 0) + (isEwtVisible ? 1 : 0) + (isStocksVisible ? 1 : 0) + visibleCategories.length + (canEdit ? 1 : 0);
   }, [isAcctsPayVisible, isEwtVisible, isStocksVisible, visibleCategories, canEdit]);
 
   const ledgerTotals = useMemo(() => {
@@ -559,7 +560,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
   // 4. HANDLERS
   // ==========================================
   const resetForm = () => {
-    setHeaderData({ date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', bank: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' });
+    setHeaderData({ date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', bank: '', check_no: '', or_inv_no: '', po_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' });
     const now = Date.now();
     setCostingGroups([makeDefaultGroup(now)]);
     setShowTaxFields(false);
@@ -742,7 +743,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     resetForm();
 
     const now = Date.now();
-    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', bank: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
+    const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', bank: '', check_no: '', or_inv_no: '', po_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
     const initGroups = [makeDefaultGroup(now)];
     setHeaderData(initHeader);
     setCostingGroups(initGroups);
@@ -764,7 +765,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     } else {
       resetForm();
       const now = Date.now();
-      const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', bank: '', check_no: '', or_inv_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
+      const initHeader = { date: new Date().toISOString().split('T')[0], project_code: '', payee: '', particulars: '', tin: '', cv_no: '', bank: '', check_no: '', or_inv_no: '', po_no: '', accts_pay: '', input_tax: '', output_tax: '', target_cib: '', costing_type: 'normal' };
       const initGroups = [makeDefaultGroup(now)];
       setHeaderData(initHeader);
       setCostingGroups(initGroups);
@@ -839,6 +840,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       bank: d.bank || '',
       check_no: d.check_no || '',
       or_inv_no: d.or_inv_no || '',
+      po_no: d.po_no || '',
       accts_pay: d.accts_pay || '',
       input_tax: d.input_tax || '',
       output_tax: d.output_tax || '',
@@ -1089,7 +1091,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     if (isDraftMode) {
       // In monitoring/draft mode — nullify empty strings but skip required-field / balance checks
-      ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee', 'cv_no'].forEach(key => {
+      ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee', 'cv_no', 'po_no'].forEach(key => {
         if (typeof finalHeaderData[key] === 'string' && finalHeaderData[key].trim() === "") {
           finalHeaderData[key] = null;
         }
@@ -1237,7 +1239,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
       if (!headerData.project_code) return;
     }
 
-    ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee'].forEach(key => {
+    ['or_inv_no', 'bank', 'check_no', 'tin', 'particulars', 'payee', 'po_no'].forEach(key => {
       if (typeof finalHeaderData[key] === 'string' && finalHeaderData[key].trim() === "") {
         finalHeaderData[key] = null;
       }
@@ -1859,6 +1861,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600">Payee</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-center">CV No.</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-center">OR / INV NO.</th>
+                  <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-center">PO</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-center">Project</th>
                   <th className="px-6 py-5 text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-right">Debit (Gross)</th>
                   <th className="px-6 py-5 text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wider border-b-2 border-r border-slate-400 dark:border-slate-600 text-right bg-emerald-100/50 dark:bg-emerald-900/30">Credit (CIB)</th>
@@ -1911,6 +1914,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                       </div>
                     </td>
                     <td className="px-6 py-4 font-black text-indigo-700 dark:text-indigo-400 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.or_inv_no ? `#${d.or_inv_no}` : '-'}</td>
+                    <td className="px-6 py-4 font-black text-slate-700 dark:text-slate-300 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">{d.po_no ? `#${d.po_no}` : '-'}</td>
                     <td className="px-6 py-4 text-center border-r border-slate-400 dark:border-slate-600 group-even:bg-slate-50/30 dark:group-even:bg-slate-800/30 group-hover:bg-blue-50/50 dark:group-hover:bg-blue-900/20">
                       <div className="flex flex-col items-center gap-1">
                         {(Array.isArray(d.project_code) ? d.project_code : [d.project_code]).map((pc, i) => (
@@ -1956,7 +1960,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
               {sortedData.length > 0 && (
                 <tfoot className="bg-slate-100 dark:bg-slate-800 font-black text-slate-800 dark:text-slate-200 border-t-4 border-slate-400 dark:border-slate-600 transition-colors duration-300">
                   <tr>
-                    <td colSpan="5" className="px-6 py-6 text-right text-xs tracking-widest text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-slate-100 dark:bg-slate-800 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">TOTAL SUMMARY:</td>
+                    <td colSpan="6" className="px-6 py-6 text-right text-xs tracking-widest text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-slate-100 dark:bg-slate-800 border-r border-slate-400 dark:border-slate-600 shadow-[3px_0_0_0_#94a3b8] dark:shadow-[3px_0_0_0_#475569] transition-colors duration-300">TOTAL SUMMARY:</td>
                     <td className="px-6 py-6 text-right font-mono text-blue-800 dark:text-blue-400 border-r border-slate-400 dark:border-slate-600 text-lg">₱{ledgerTotals.dr.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td className="px-6 py-6 text-right font-mono text-emerald-800 dark:text-emerald-400 border-r border-slate-400 dark:border-slate-600 text-lg">₱{ledgerTotals.cib.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     {isAcctsPayVisible && (
@@ -2276,6 +2280,12 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                           }
                           handleHeaderChange({ target: { name: 'target_cib', value: val } });
                         }} required={!isMonitoringOnly} />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">PO #</label>
+                      <input type="text" name="po_no" placeholder="Optional" className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-slate-800 dark:text-white transition-colors"
+                        value={headerData.po_no || ''} onChange={handleHeaderChange} />
                     </div>
 
                     <div className="space-y-1 md:col-span-1 flex items-end pb-1">
