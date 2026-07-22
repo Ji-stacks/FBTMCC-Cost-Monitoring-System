@@ -250,10 +250,10 @@ app.post('/api/forgot-password/reset', async (req, res) => {
     if (err) return res.status(500).json({ error: "Database error." });
     if (!user) return res.status(404).json({ error: "User not found." });
     const match = await bcrypt.compare(answer.toLowerCase().trim(), user.security_answer);
-    if (!match) return res.status(401).json({ error: "Mali ang sagot sa security question!" });
+    if (!match) return res.status(401).json({ error: "Wrong security answer!" });
     const hashedNewPass = await bcrypt.hash(newPassword, 10);
     db.run("UPDATE users SET password = ? WHERE id = ?", [hashedNewPass, user.id], (updateErr) => {
-      if (updateErr) return res.status(500).json({ error: "Hindi ma-update ang password." });
+      if (updateErr) return res.status(500).json({ error: "Failed to update password." });
       logActivity(username, 'RESET_PASSWORD', 'user', user.id, 'Password reset via security question');
       res.json({ success: true, message: "Password updated successfully!" });
     });
@@ -266,7 +266,7 @@ app.post('/api/verify-password', authenticateToken, (req, res) => {
     if (err) return res.status(500).json({ error: "Database error." });
     if (!user) return res.status(401).json({ error: "User not found." });
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ error: "Mali ang password." });
+    if (!match) return res.status(401).json({ error: "Wrong password." });
     res.json({ success: true });
   });
 });
