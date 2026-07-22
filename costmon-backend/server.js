@@ -114,6 +114,7 @@ db.serialize(() => {
   db.run("ALTER TABLE disbursements ADD COLUMN costing_type TEXT DEFAULT 'normal'", () => { });
   db.run("ALTER TABLE disbursements ADD COLUMN attachments_json TEXT DEFAULT '[]'", () => { });
   db.run("ALTER TABLE disbursements ADD COLUMN bank TEXT", () => { });
+  db.run("ALTER TABLE disbursements ADD COLUMN po_no TEXT", () => { });
   db.run("ALTER TABLE disbursements ADD COLUMN stocks_amount REAL DEFAULT 0", () => { });
   db.run("ALTER TABLE disbursements ADD COLUMN stock_description TEXT DEFAULT ''", () => { });
   db.run("ALTER TABLE disbursements ADD COLUMN is_monitoring_only INTEGER DEFAULT 0", () => { });
@@ -692,7 +693,7 @@ app.post('/api/disbursements', authenticateToken, (req, res) => {
 
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
-    const stmt = db.prepare('INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, bank, check_no, or_inv_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at, costing_type, attachments_json, stocks_amount, stock_description, is_monitoring_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const stmt = db.prepare('INSERT INTO disbursements (id, project_code, date, payee, particulars, tin, cv_no, bank, check_no, or_inv_no, po_no, accts_pay, input_tax, output_tax, target_cib, gross_amount, ewt_amount, net_amount, expenses_json, created_at, costing_type, attachments_json, stocks_amount, stock_description, is_monitoring_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 
     let hasError = false;
     let completed = 0;
@@ -703,7 +704,7 @@ app.post('/api/disbursements', authenticateToken, (req, res) => {
 
       const s = (val) => (val === "" || val === undefined) ? null : val;
 
-      stmt.run(newId, s(data.project_code), data.date, s(data.payee), s(data.particulars), s(data.tin), s(data.cv_no), s(data.bank), s(data.check_no), s(data.or_inv_no), data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', data.is_monitoring_only ? 1 : 0, function (err) {
+      stmt.run(newId, s(data.project_code), data.date, s(data.payee), s(data.particulars), s(data.tin), s(data.cv_no), s(data.bank), s(data.check_no), s(data.or_inv_no), s(data.po_no), data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.created_at, data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', data.is_monitoring_only ? 1 : 0, function (err) {
         if (hasError) return;
         if (err) {
           hasError = true;
@@ -768,8 +769,8 @@ app.put('/api/disbursements/:id', authenticateToken, (req, res) => {
   }
 
   const s = (val) => (val === "" || val === undefined) ? null : val;
-  const stmt = db.prepare('UPDATE disbursements SET project_code=?, date=?, payee=?, particulars=?, tin=?, cv_no=?, bank=?, check_no=?, or_inv_no=?, accts_pay=?, input_tax=?, output_tax=?, target_cib=?, gross_amount=?, ewt_amount=?, net_amount=?, expenses_json=?, costing_type=?, attachments_json=?, stocks_amount=?, stock_description=?, is_monitoring_only=? WHERE id=?');
-  stmt.run(s(data.project_code), data.date, s(data.payee), s(data.particulars), s(data.tin), s(data.cv_no), s(data.bank), s(data.check_no), s(data.or_inv_no), data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', data.is_monitoring_only ? 1 : 0, id, function (err) {
+  const stmt = db.prepare('UPDATE disbursements SET project_code=?, date=?, payee=?, particulars=?, tin=?, cv_no=?, bank=?, check_no=?, or_inv_no=?, po_no=?, accts_pay=?, input_tax=?, output_tax=?, target_cib=?, gross_amount=?, ewt_amount=?, net_amount=?, expenses_json=?, costing_type=?, attachments_json=?, stocks_amount=?, stock_description=?, is_monitoring_only=? WHERE id=?');
+  stmt.run(s(data.project_code), data.date, s(data.payee), s(data.particulars), s(data.tin), s(data.cv_no), s(data.bank), s(data.check_no), s(data.or_inv_no), s(data.po_no), data.accts_pay || 0, data.input_tax || 0, data.output_tax || 0, data.target_cib || 0, data.gross_amount || 0, data.ewt_amount || 0, data.net_amount || 0, JSON.stringify(data.expenses), data.costing_type || 'normal', JSON.stringify(data.attachments || []), data.stocks_amount || 0, data.stock_description || '', data.is_monitoring_only ? 1 : 0, id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
     logActivity(req.user.username, 'UPDATE_DISBURSEMENT', 'disbursement', id, 'CV# ' + data.cv_no + ' | Project: ' + data.project_code);
     res.json({ success: true, message: 'Record updated successfully.' });
