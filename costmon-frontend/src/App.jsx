@@ -293,12 +293,12 @@ export default function App() {
           {isSidebarOpen ? (
             <div>
               <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-                <img src={FBTlogo} alt="FBTMCC Logo" className="w-8 h-auto object-contain shrink-0" /> FBTMCC
+                <img src={FBTlogo} alt="FBTMCC Logo" draggable={false} className="w-8 h-auto object-contain shrink-0 select-none" /> FBTMCC
               </h1>
               <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">Cost Monitoring System</p>
             </div>
           ) : (
-            <img src={FBTlogo} alt="FBTMCC Logo" className="w-8 h-auto object-contain shrink-0" />
+            <img src={FBTlogo} alt="FBTMCC Logo" draggable={false} className="w-8 h-auto object-contain shrink-0 select-none" />
           )}
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-slate-400 hover:text-white p-1.5 hover:bg-slate-800 dark:hover:bg-slate-900 rounded-md">
             {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
