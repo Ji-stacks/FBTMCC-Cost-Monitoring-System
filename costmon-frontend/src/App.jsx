@@ -288,7 +288,7 @@ export default function App() {
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-300 transition-colors duration-300">
 
       {/* SIDEBAR */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-[80px]'} bg-slate-900 dark:bg-[#050505] text-slate-300 flex flex-col z-20 shadow-xl transition-all duration-300 shrink-0 border-r border-transparent dark:border-slate-800/50`}>
+      <aside className={`${isSidebarOpen ? 'w-64' : 'w-[80px]'} bg-slate-900 dark:bg-[#050505] text-slate-300 flex flex-col z-20 shadow-xl transition-all duration-300 shrink-0 border-r border-transparent dark:border-slate-800/50 select-none`}>
         <div className={`p-4 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center flex-col gap-4 pt-6'} min-h-[80px]`}>
           {isSidebarOpen ? (
             <div>
