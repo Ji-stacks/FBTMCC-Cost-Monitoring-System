@@ -181,6 +181,78 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
     return saved ? parseFloat(saved) : 1;
   });
 
+  // --- STICKY HORIZONTAL SCROLLBAR ---
+  // Refs: tableWrapRef = the overflow-x container; stickyBarRef = the phantom sticky bar; phantomRef = inner spacer div
+  const tableWrapRef = useRef(null);
+  const stickyBarRef = useRef(null);
+  const phantomRef = useRef(null);
+
+  useEffect(() => {
+    // All DOM access is safely inside the effect (after mount).
+    // We use native event listeners — NO setState calls — to avoid re-render loops.
+    const tableWrap = tableWrapRef.current;
+    const stickyBar = stickyBarRef.current;
+    const phantom = phantomRef.current;
+    if (!tableWrap || !stickyBar || !phantom) return;
+
+    // Set phantom width to match table scroll width so the fixed bar is scrollable
+    const syncWidth = () => {
+      if (!tableWrapRef.current || !phantomRef.current) return;
+      phantomRef.current.style.width = tableWrapRef.current.scrollWidth + 'px';
+    };
+
+    // Position the fixed bar to align with the table container's left edge and width
+    const positionBar = () => {
+      if (!tableWrapRef.current || !stickyBarRef.current) return;
+      const rect = tableWrapRef.current.getBoundingClientRect();
+      stickyBarRef.current.style.left = rect.left + 'px';
+      stickyBarRef.current.style.width = rect.width + 'px';
+    };
+
+    let isSyncingFromTable = false;
+    let isSyncingFromBar = false;
+
+    const onTableScroll = () => {
+      if (isSyncingFromBar) return;
+      isSyncingFromTable = true;
+      if (stickyBarRef.current) stickyBarRef.current.scrollLeft = tableWrapRef.current.scrollLeft;
+      isSyncingFromTable = false;
+    };
+
+    const onBarScroll = () => {
+      if (isSyncingFromTable) return;
+      isSyncingFromBar = true;
+      if (tableWrapRef.current) tableWrapRef.current.scrollLeft = stickyBarRef.current.scrollLeft;
+      isSyncingFromBar = false;
+    };
+
+    syncWidth();
+    positionBar();
+    tableWrap.addEventListener('scroll', onTableScroll, { passive: true });
+    stickyBar.addEventListener('scroll', onBarScroll, { passive: true });
+    window.addEventListener('resize', positionBar, { passive: true });
+
+    let raf;
+    let ro;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => { syncWidth(); positionBar(); });
+      });
+      ro.observe(tableWrap);
+    }
+
+    return () => {
+      tableWrap.removeEventListener('scroll', onTableScroll);
+      stickyBar.removeEventListener('scroll', onBarScroll);
+      window.removeEventListener('resize', positionBar);
+      if (ro) ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Reruns when activeView changes so refs are populated after the table section renders.
+
+
   const handleZoomIn = () => {
     setZoomLevel(prev => {
       const next = Math.min(prev + 0.1, 1.5);
@@ -1549,7 +1621,9 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                 )}
               </div>
 
-              <div className="overflow-x-auto custom-scrollbar">
+              <div className="relative">
+                {/* Actual table scroll container — native scrollbar hidden, controlled by sticky bar below */}
+                <div ref={tableWrapRef} className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 <table className="w-full text-left border-collapse min-w-[3200px]" style={{ zoom: zoomLevel }}>
                   <thead>
                     {/* Column group row */}
@@ -1785,8 +1859,9 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       </td>
                     </tr>
                   </tfoot>
-                </table>
-              </div>
+                 </table>
+                </div>{/* end tableWrapRef */}
+              </div>{/* end relative wrapper */}
             </section>
           </div>
         )}
@@ -1889,6 +1964,28 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
         </div>
       )}
 
+      {/* ================================================
+          FIXED VIEWPORT-BOTTOM HORIZONTAL SCROLLBAR
+          Shown only on the Monthly Unified Master Ledger.
+          Position + width are set dynamically by the useEffect.
+      ================================================ */}
+      {activeView === 'office' && (
+        <div
+          ref={stickyBarRef}
+          className="custom-scrollbar bg-slate-100 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700"
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            zIndex: 50,
+            height: '10px',
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            /* left and width set by JS in useEffect */
+          }}
+        >
+          <div ref={phantomRef} style={{ height: '1px', width: '100%' }} />
+        </div>
+      )}
     </div>
   );
 }
