@@ -187,7 +187,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
   const handleProjectDropdownChange = (val) => {
     const selected = projects.find(p => `${p.project_code} — ${p.project_name}` === val);
     if (selected) {
-      if (isProjectDirty) {
+      if (isProjectDirty && userRole !== 'engineer') {
         setPendingProjectId(selected.id);
         setShowProjectUnsavedModal(true);
       } else {
@@ -196,8 +196,12 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
     }
   };
 
-  const handleInputChange = (field, value) => setEditingValues(prev => ({ ...prev, [field]: value }));
+  const handleInputChange = (field, value) => {
+    if (userRole === 'engineer') return;
+    setEditingValues(prev => ({ ...prev, [field]: value }));
+  };
   const handleSaveClick = () => {
+    if (userRole === 'engineer') return;
     if (!canEdit) return;
     executeSaveProject(editingValues);
   };
@@ -241,6 +245,7 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
   };
 
   const executeSaveProject = async (values) => {
+    if (userRole === 'engineer') return;
     setIsSaving(true);
     if (onUpdateProject && project) {
       const cleanValues = {
@@ -547,18 +552,18 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
 
                 <div className="grid grid-cols-[140px_1fr] items-center mt-2">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">Project Area:</span>
-                  <input type="text" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white"
-                    value={editingValues.project_area} onChange={e => handleInputChange('project_area', e.target.value)} placeholder="e.g. 150 sqm" />
+                  <input type="text" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={userRole === 'engineer'} value={editingValues.project_area} onChange={e => handleInputChange('project_area', e.target.value)} placeholder="e.g. 150 sqm" />
                 </div>
                 <div className="grid grid-cols-[140px_1fr] items-center mt-2">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">Project Start:</span>
-                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white"
-                    value={editingValues.project_start} onChange={e => handleInputChange('project_start', e.target.value)} />
+                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={userRole === 'engineer'} value={editingValues.project_start} onChange={e => handleInputChange('project_start', e.target.value)} />
                 </div>
                 <div className="grid grid-cols-[140px_1fr] items-center mt-2 mb-6">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">40 Days End:</span>
-                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white"
-                    value={editingValues.days_end} onChange={e => handleInputChange('days_end', e.target.value)} />
+                  <input type="date" className="w-full bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-800 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={userRole === 'engineer'} value={editingValues.days_end} onChange={e => handleInputChange('days_end', e.target.value)} />
                 </div>
 
                 <div className="w-full h-[2px] bg-slate-300 dark:bg-slate-600 my-2"></div>
@@ -567,8 +572,8 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400">Contract Cost:</span>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-700 dark:text-amber-500">₱</span>
-                    <input type="text" className="w-full bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-400 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-amber-500 outline-none shadow-sm text-right font-black text-sm"
-                      value={editingValues.contract_cost} onChange={e => {
+                    <input type="text" className="w-full bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-400 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-amber-500 outline-none shadow-sm text-right font-black text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                      disabled={userRole === 'engineer'} value={editingValues.contract_cost} onChange={e => {
                         let val = e.target.value.replace(/[^0-9.]/g, '');
                         const parts = val.split('.');
                         if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
@@ -591,8 +596,8 @@ export default function CostMonitoringScreen({ projects, disbursements, categori
                 </div>
                 <div className="grid grid-cols-[140px_1fr] items-center mt-1">
                   <span className="uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    Profit @ <input type="number" className="w-12 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-md px-1 py-1 focus:ring-2 focus:ring-blue-500 outline-none text-center shadow-sm text-slate-800 dark:text-white"
-                      value={(editingValues.profit_percentage * 100).toFixed(0)} onChange={e => handleInputChange('profit_percentage', parseFloat(e.target.value) / 100)} />%
+                    Profit @ <input type="number" className="w-12 bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 rounded-md px-1 py-1 focus:ring-2 focus:ring-blue-500 outline-none text-center shadow-sm text-slate-800 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                      disabled={userRole === 'engineer'} value={(editingValues.profit_percentage * 100).toFixed(0)} onChange={e => handleInputChange('profit_percentage', parseFloat(e.target.value) / 100)} />%
                   </span>
                   <span className="text-right font-mono text-sm pr-3 text-emerald-700 dark:text-emerald-400 font-black">{formatMoney(financials.profitAmount)}</span>
                 </div>
