@@ -308,6 +308,7 @@ app.get('/api/users/preferences', authenticateToken, (req, res) => {
 });
 
 app.put('/api/users/preferences', authenticateToken, (req, res) => {
+  if (req.user.role === 'engineer') return res.status(403).json({ error: "Engineers cannot update dashboard preferences." });
   db.get("SELECT preferences FROM users WHERE id = ?", [req.user.id], (err, row) => {
     if (err) return res.status(500).json({ error: "Database error." });
     if (!row) return res.status(404).json({ error: "User not found." });
@@ -320,7 +321,7 @@ app.put('/api/users/preferences', authenticateToken, (req, res) => {
     const newPrefs = { ...currentPrefs, ...req.body };
     const prefsString = JSON.stringify(newPrefs);
 
-    db.run("UPDATE users SET preferences = ? WHERE id = ?", [prefsString, req.user.id], (updateErr) => {
+    db.run("UPDATE users SET preferences = ?", [prefsString], (updateErr) => {
       if (updateErr) return res.status(500).json({ error: "Failed to update preferences." });
       res.json({ success: true, preferences: newPrefs });
     });

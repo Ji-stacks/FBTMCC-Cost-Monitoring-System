@@ -4,7 +4,7 @@ import { API_URL } from '../utils/Constants';
 import { generateFilename } from '../utils/exportUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line } from 'recharts';
 
-export default function DashboardScreen({ projects = [], disbursements = [], categories = [] }) {
+export default function DashboardScreen({ projects = [], disbursements = [], categories = [], userRole }) {
   const [activeView, setActiveView] = useState('selection');
 
   // --- DYNAMIC OPR CONFIGURATION STATES ---
@@ -53,6 +53,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   }, []);
 
   const saveColumnConfig = async () => {
+    if (userRole === 'engineer') return;
     if (!editingColumn) return;
     const updated = customColumns.map(col => col.id === editingColumn.id ? editingColumn : col);
     setCustomColumns(updated);
@@ -69,6 +70,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   };
 
   const toggleProjectSelection = (code) => {
+    if (userRole === 'engineer') return;
     const updated = overheadProjects.includes(code)
       ? overheadProjects.filter(p => p !== code)
       : [...overheadProjects, code];
@@ -85,6 +87,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   };
 
   const toggleProjectVisibility = (code) => {
+    if (userRole === 'engineer') return;
     const updated = hiddenProjects.includes(code)
       ? hiddenProjects.filter(p => p !== code)
       : [...hiddenProjects, code];
@@ -101,6 +104,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   };
 
   const toggleMonthVisibility = (monthKey) => {
+    if (userRole === 'engineer') return;
     const updated = hiddenMonths.includes(monthKey)
       ? hiddenMonths.filter(m => m !== monthKey)
       : [...hiddenMonths, monthKey];
@@ -1428,13 +1432,15 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                                       <Calendar size={12} className="text-indigo-500" />
                                       {label}
                                     </span>
-                                    <button 
-                                      onClick={() => toggleMonthVisibility(mk)}
-                                      className="text-slate-400 hover:text-emerald-500 opacity-0 group-hover/item:opacity-100 transition-opacity p-1 bg-white dark:bg-slate-800 rounded shadow-sm border border-slate-200 dark:border-slate-600"
-                                      title="Unhide Month"
-                                    >
-                                      <Eye size={12} />
-                                    </button>
+                                    {userRole !== 'engineer' && (
+                                      <button 
+                                        onClick={() => toggleMonthVisibility(mk)}
+                                        className="text-slate-400 hover:text-emerald-500 opacity-0 group-hover/item:opacity-100 transition-opacity p-1 bg-white dark:bg-slate-800 rounded shadow-sm border border-slate-200 dark:border-slate-600"
+                                        title="Unhide Month"
+                                      >
+                                        <Eye size={12} />
+                                      </button>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -1455,13 +1461,15 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                                     <Briefcase size={12} className="text-indigo-400" />
                                     {code}
                                   </span>
-                                  <button 
-                                    onClick={() => toggleProjectVisibility(code)}
-                                    className="text-slate-400 hover:text-emerald-500 opacity-0 group-hover/item:opacity-100 transition-opacity p-1 bg-white dark:bg-slate-800 rounded shadow-sm border border-slate-200 dark:border-slate-600"
-                                    title="Unhide Project"
-                                  >
-                                    <Eye size={12} />
-                                  </button>
+                                  {userRole !== 'engineer' && (
+                                    <button 
+                                      onClick={() => toggleProjectVisibility(code)}
+                                      className="text-slate-400 hover:text-emerald-500 opacity-0 group-hover/item:opacity-100 transition-opacity p-1 bg-white dark:bg-slate-800 rounded shadow-sm border border-slate-200 dark:border-slate-600"
+                                      title="Unhide Project"
+                                    >
+                                      <Eye size={12} />
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -1511,7 +1519,8 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       <button
                         key={code}
                         onClick={() => toggleProjectSelection(code)}
-                        className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors ${overheadProjects.includes(code)
+                        disabled={userRole === 'engineer'}
+                        className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${overheadProjects.includes(code)
                             ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700'
                             : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
                           }`}
@@ -1573,10 +1582,11 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                         <th
                           key={col.id}
                           onClick={() => {
+                            if (userRole === 'engineer') return;
                             setEditingColumn(col);
                             setIsColumnModalOpen(true);
                           }}
-                          className={`p-3 text-center bg-amber-50 dark:bg-amber-900/5 hover:bg-amber-100 dark:hover:bg-amber-900/20 cursor-pointer transition-colors group border-r ${idx === customColumns.length - 1 ? 'border-amber-200 dark:border-amber-700' : 'border-amber-100 dark:border-amber-900/50'
+                          className={`p-3 text-center bg-amber-50 dark:bg-amber-900/5 ${userRole !== 'engineer' ? 'hover:bg-amber-100 dark:hover:bg-amber-900/20 cursor-pointer' : 'cursor-default'} transition-colors group border-r ${idx === customColumns.length - 1 ? 'border-amber-200 dark:border-amber-700' : 'border-amber-100 dark:border-amber-900/50'
                             }`}
                           title="Click to configure column mappings"
                         >

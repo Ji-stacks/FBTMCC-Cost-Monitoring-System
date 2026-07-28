@@ -370,6 +370,7 @@ export default function App() {
                 projects={projects}
                 disbursements={disbursements}
                 categories={categories}
+                userRole={userRole}
               />
             }
           />
