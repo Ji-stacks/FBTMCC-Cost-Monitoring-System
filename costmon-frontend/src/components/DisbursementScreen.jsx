@@ -1062,17 +1062,23 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
     // Block submission if any active row in Cost Breakdown has missing/unselected category
     if (!isPureStock) {
       const hasUnselectedCategory = costingGroups.some(group => {
+        const isGroupEmpty = ![...group.constructionLines, ...group.miscLines].some(l => {
+          const catEmpty = !l.category || !l.category.trim() || l.category.toLowerCase().includes('select');
+          const amt = parseFloat(String(l.amount).replace(/,/g, '')) || 0;
+          const hasAmt = amt > 0 || (l.amount && String(l.amount).trim() !== '');
+          return !catEmpty || hasAmt;
+        });
         const constructionInvalid = group.constructionLines.some(line => {
           const isCatEmpty = !line.category || !line.category.trim() || line.category.toLowerCase().includes('select');
           const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
           const hasAmount = rawAmt > 0 || (line.amount && String(line.amount).trim() !== '');
-          return isCatEmpty && (hasAmount || group.constructionLines.length === 1);
+          return isCatEmpty && (hasAmount || isGroupEmpty);
         });
         const miscInvalid = group.miscLines.some(line => {
           const isCatEmpty = !line.category || !line.category.trim() || line.category.toLowerCase().includes('select');
           const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
           const hasAmount = rawAmt > 0 || (line.amount && String(line.amount).trim() !== '');
-          return isCatEmpty && hasAmount;
+          return isCatEmpty && (hasAmount || isGroupEmpty);
         });
         return constructionInvalid || miscInvalid;
       });
@@ -1280,17 +1286,23 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
 
     if (!isPureStock) {
       const hasUnselectedCategory = costingGroups.some(group => {
+        const isGroupEmpty = ![...group.constructionLines, ...group.miscLines].some(l => {
+          const catEmpty = !l.category || !l.category.trim() || l.category.toLowerCase().includes('select');
+          const amt = parseFloat(String(l.amount).replace(/,/g, '')) || 0;
+          const hasAmt = amt > 0 || (l.amount && String(l.amount).trim() !== '');
+          return !catEmpty || hasAmt;
+        });
         const constructionInvalid = group.constructionLines.some(line => {
           const isCatEmpty = !line.category || !line.category.trim() || line.category.toLowerCase().includes('select');
           const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
           const hasAmount = rawAmt > 0 || (line.amount && String(line.amount).trim() !== '');
-          return isCatEmpty && (hasAmount || group.constructionLines.length === 1);
+          return isCatEmpty && (hasAmount || isGroupEmpty);
         });
         const miscInvalid = group.miscLines.some(line => {
           const isCatEmpty = !line.category || !line.category.trim() || line.category.toLowerCase().includes('select');
           const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
           const hasAmount = rawAmt > 0 || (line.amount && String(line.amount).trim() !== '');
-          return isCatEmpty && hasAmount;
+          return isCatEmpty && (hasAmount || isGroupEmpty);
         });
         return constructionInvalid || miscInvalid;
       });
@@ -2345,6 +2357,13 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                           const usedMainCategories = group.constructionLines.map(item => item.category).filter(Boolean);
                           const usedMiscCategories = group.miscLines.map(item => item.category).filter(Boolean);
 
+                          const isGroupEmpty = ![...group.constructionLines, ...group.miscLines].some(l => {
+                            const catEmpty = !l.category || !l.category.trim() || l.category.toLowerCase().includes('select');
+                            const amt = parseFloat(String(l.amount).replace(/,/g, '')) || 0;
+                            const hasAmt = amt > 0 || (l.amount && String(l.amount).trim() !== '');
+                            return !catEmpty || hasAmt;
+                          });
+
                           return (
                             <div key={group.id} className={`border-2 border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden shadow-sm animate-in slide-in-from-top-2 ${groupIndex % 2 === 0 ? 'bg-slate-50 dark:bg-slate-800' : 'bg-blue-50 dark:bg-slate-800/70'}`}>
                               {/* Group Header with Target Selector */}
@@ -2397,7 +2416,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                       const isCatEmpty = !line.category || !line.category.trim() || line.category.toLowerCase().includes('select');
                                       const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
                                       const hasAmount = rawAmt > 0 || (line.amount && String(line.amount).trim() !== '');
-                                      const showCategoryError = hasAttemptedSubmit && isCatEmpty && (hasAmount || group.constructionLines.length === 1);
+                                      const showCategoryError = hasAttemptedSubmit && isCatEmpty && (hasAmount || isGroupEmpty);
                                       const showAmountError = hasAttemptedSubmit && !isCatEmpty && rawAmt <= 0;
 
                                       return (
@@ -2463,7 +2482,7 @@ export default function DisbursementScreen({ projects, categories, categoryObjec
                                       const isCatEmpty = !line.category || !line.category.trim() || line.category.toLowerCase().includes('select');
                                       const rawAmt = parseFloat(String(line.amount).replace(/,/g, '')) || 0;
                                       const hasAmount = rawAmt > 0 || (line.amount && String(line.amount).trim() !== '');
-                                      const showCategoryError = hasAttemptedSubmit && isCatEmpty && hasAmount;
+                                      const showCategoryError = hasAttemptedSubmit && isCatEmpty && (hasAmount || isGroupEmpty);
                                       const showAmountError = hasAttemptedSubmit && !isCatEmpty && rawAmt <= 0;
 
                                       return (
