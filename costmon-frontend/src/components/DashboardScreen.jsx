@@ -1961,11 +1961,8 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                           <td className="p-3 text-right font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-900/5 border-r border-emerald-100 dark:border-emerald-800/40">
                             {row.total_specific_expenses > 0 ? fmt(row.total_specific_expenses) : dash}
                           </td>
-                          <td className={`p-3 text-right font-mono font-bold ${row.NET_PROFIT >= 0
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-rose-600 dark:text-rose-400'
-                            } bg-emerald-50/10 dark:bg-emerald-900/5`}>
-                            {fmt(row.NET_PROFIT)}
+                          <td className="p-3 text-center border-r border-emerald-100 dark:border-emerald-800/40 text-slate-300 dark:text-slate-700 bg-emerald-50/10 dark:bg-emerald-900/5">
+                            &mdash;
                           </td>
                         </tr>
                       );
