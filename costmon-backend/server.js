@@ -2291,7 +2291,7 @@ app.post('/api/office-ledger/export-styled', authenticateToken, async (req, res)
           '',
           ...customColumns.map(() => '—'),
           '—',
-          fmtNum(row.NET_PROFIT)
+          ''
         ];
 
         const dr = sheet.addRow(values);
