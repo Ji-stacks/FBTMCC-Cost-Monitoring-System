@@ -9,6 +9,8 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const ExcelJS = require('exceljs');
+const helmet = require('helmet');
+const crypto = require('crypto');
 
 const app = express();
 
@@ -25,7 +27,8 @@ app.use(cors({
   exposedHeaders: ['Content-Disposition']
 }));
 
-app.use(express.json({ limit: '50mb' }));
+app.use(helmet());
+app.use(express.json({ limit: '2mb' }));
 
 // ==========================================
 // UPLOADS FOLDER SETUP
@@ -56,11 +59,29 @@ const upload = multer({
   }
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'isang_temporary_fallback_secret';
-
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
+if (!process.env.JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET environment variable not set. A random secret was generated. User sessions will not persist across server restarts.');
+}
 
 // ==========================================
 // 2. SECURITY: RATE LIMITING
+// ==========================================
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // limit each IP to 500 requests per windowMs
+  message: { error: "Too many requests from this IP, please try again after 15 minutes." }
+});
+app.use('/api/', globalLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // limit to 10 requests per windowMs for auth routes
+  message: { error: "Too many attempts, please try again later." }
+});
+app.use('/api/login', authLimiter);
+app.use('/api/forgot-password/reset', authLimiter);
+
 // ==========================================
 // 3. JWT MIDDLEWARE
 // ==========================================
@@ -606,7 +627,7 @@ app.get('/api/audit-logs/export', authenticateToken, requireCEO, async (req, res
 // PROJECTS ENDPOINTS
 // ==========================================
 app.get('/api/projects', authenticateToken, (req, res) => { db.all("SELECT * FROM projects ORDER BY project_code ASC", [], (err, rows) => { if (err) return res.status(500).json({ error: err.message }); res.json(rows); }); });
-app.post('/api/projects', authenticateToken, (req, res) => { const { id, project_code, project_name, contract_cost, profit_percentage, project_type, project_area, project_start, days_end } = req.body; const newId = id || Math.random().toString(36).substr(2, 9); db.run("INSERT INTO projects (id, project_code, project_name, contract_cost, profit_percentage, project_type, project_area, project_start, days_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [newId, project_code, project_name, contract_cost || 0, profit_percentage || 0.20, project_type || 'Construction', project_area || '', project_start || '', days_end || ''], function (err) { if (err) return res.status(500).json({ error: err.message }); logActivity(req.user.username, 'CREATE_PROJECT', 'project', newId, 'Created: ' + project_code + ' - ' + project_name); res.json({ success: true, id: newId }); }); });
+app.post('/api/projects', authenticateToken, (req, res) => { const { id, project_code, project_name, contract_cost, profit_percentage, project_type, project_area, project_start, days_end } = req.body; const newId = id || crypto.randomUUID(); db.run("INSERT INTO projects (id, project_code, project_name, contract_cost, profit_percentage, project_type, project_area, project_start, days_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [newId, project_code, project_name, contract_cost || 0, profit_percentage || 0.20, project_type || 'Construction', project_area || '', project_start || '', days_end || ''], function (err) { if (err) return res.status(500).json({ error: err.message }); logActivity(req.user.username, 'CREATE_PROJECT', 'project', newId, 'Created: ' + project_code + ' - ' + project_name); res.json({ success: true, id: newId }); }); });
 app.put('/api/projects/:id', authenticateToken, (req, res) => { const { project_code, project_name, contract_cost, profit_percentage, project_type, project_area, project_start, days_end } = req.body; let fields = []; let params = []; if (project_code !== undefined) { fields.push("project_code=?"); params.push(project_code); } if (project_name !== undefined) { fields.push("project_name=?"); params.push(project_name); } if (contract_cost !== undefined) { fields.push("contract_cost=?"); params.push(contract_cost); } if (profit_percentage !== undefined) { fields.push("profit_percentage=?"); params.push(profit_percentage); } if (project_type !== undefined) { fields.push("project_type=?"); params.push(project_type); } if (project_area !== undefined) { fields.push("project_area=?"); params.push(project_area); } if (project_start !== undefined) { fields.push("project_start=?"); params.push(project_start); } if (days_end !== undefined) { fields.push("days_end=?"); params.push(days_end); } if (fields.length === 0) return res.json({ success: true, message: "No changes" }); params.push(req.params.id); db.run('UPDATE projects SET ' + fields.join(', ') + ' WHERE id=?', params, function (err) { if (err) return res.status(500).json({ error: err.message }); logActivity(req.user.username, 'UPDATE_PROJECT', 'project', req.params.id, 'Updated project'); res.json({ success: true }); }); });
 app.delete('/api/projects/:id', authenticateToken, (req, res) => { db.get("SELECT project_code FROM projects WHERE id=?", [req.params.id], (e, proj) => { db.run("DELETE FROM projects WHERE id=?", req.params.id, function (err) { if (err) return res.status(500).json({ error: err.message }); logActivity(req.user.username, 'DELETE_PROJECT', 'project', req.params.id, 'Deleted: ' + (proj ? proj.project_code : req.params.id)); res.json({ success: true }); }); }); });
 
@@ -622,7 +643,7 @@ app.get('/api/stocks', authenticateToken, (req, res) => {
 
 app.post('/api/stocks', authenticateToken, (req, res) => {
   const { id, item_name, sku, category, quantity, unit, reorder_level, unit_cost, project_code } = req.body;
-  const newId = id || Math.random().toString(36).substr(2, 9);
+  const newId = id || crypto.randomUUID();
   const last_updated = new Date().toISOString();
   db.run(
     "INSERT INTO stocks (id, item_name, sku, category, quantity, unit, reorder_level, unit_cost, project_code, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -719,7 +740,7 @@ app.post('/api/disbursements', authenticateToken, (req, res) => {
 
     dataList.forEach(data => {
       if (hasError) return;
-      const newId = Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
+      const newId = crypto.randomUUID();
 
       const s = (val) => (val === "" || val === undefined) ? null : val;
 
@@ -1453,16 +1474,17 @@ app.post('/api/disbursements/:id/upload', authenticateToken, upload.single('rece
 
 app.delete('/api/disbursements/:id/attachments/:filename', authenticateToken, (req, res) => {
   const { id, filename } = req.params;
-  const filePath = path.join(uploadsDir, filename);
+  const safeFilename = path.basename(filename);
+  const filePath = path.join(uploadsDir, safeFilename);
   db.get("SELECT attachments_json FROM disbursements WHERE id=?", [id], (err, row) => {
     if (err || !row) return res.status(404).json({ error: 'Disbursement not found.' });
     let attachments = [];
     try { attachments = JSON.parse(row.attachments_json || '[]'); } catch (e) { attachments = []; }
-    attachments = attachments.filter(a => a.filename !== filename);
+    attachments = attachments.filter(a => a.filename !== safeFilename);
     db.run("UPDATE disbursements SET attachments_json=? WHERE id=?", [JSON.stringify(attachments), id], (updateErr) => {
       if (updateErr) return res.status(500).json({ error: updateErr.message });
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      logActivity(req.user.username, 'DELETE_ATTACHMENT', 'disbursement', id, 'Deleted: ' + filename);
+      logActivity(req.user.username, 'DELETE_ATTACHMENT', 'disbursement', id, 'Deleted: ' + safeFilename);
       res.json({ success: true });
     });
   });

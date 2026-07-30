@@ -1,11 +1,23 @@
 import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
-import { LayoutDashboard, Briefcase, Building2, ArrowLeft, TrendingUp, FileText, ZoomIn, ZoomOut, RotateCcw, Wallet, Receipt, Eye, EyeOff, Calendar, X, Download, FileSpreadsheet, BarChart2, PieChart as PieChartIcon, Settings } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Building2, ArrowLeft, TrendingUp, FileText, ZoomIn, ZoomOut, RotateCcw, Wallet, Receipt, Eye, EyeOff, Calendar, X, Download, FileSpreadsheet, BarChart2, PieChart as PieChartIcon, Settings, ChevronDown } from 'lucide-react';
 import { API_URL } from '../utils/Constants';
 import { generateFilename } from '../utils/exportUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line } from 'recharts';
 
+const SORT_OPTIONS = [
+  { value: 'default', label: 'W-Projects First (Default)' },
+  { value: 'code-asc', label: 'Project Code (A-Z)' },
+  { value: 'code-desc', label: 'Project Code (Z-A)' },
+  { value: 'name-asc', label: 'Store Name (A-Z)' },
+  { value: 'amount-desc', label: 'Total Contract Amount (Highest to Lowest)' },
+  { value: 'amount-asc', label: 'Total Contract Amount (Lowest to Highest)' },
+  { value: 'addl-desc', label: 'Total Additional Works (Highest to Lowest)' },
+];
+
 export default function DashboardScreen({ projects = [], disbursements = [], categories = [], userRole }) {
   const [activeView, setActiveView] = useState('selection');
+  const [projectSortOrder, setProjectSortOrder] = useState('default');
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
 
   // --- DYNAMIC OPR CONFIGURATION STATES ---
   const [overheadProjects, setOverheadProjects] = useState(['OFFICE', 'PAYATAS', 'RESIDENCE']);
@@ -148,6 +160,17 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
 
   const projectTableRef = useRef(null);
   const officeTableRef = useRef(null); // Ref para sa Office Table
+  const sortDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) {
+        setIsSortDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Date Filter States
   const [startDate, setStartDate] = useState('');
@@ -716,8 +739,36 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   }, [projects, filteredDisbursements, customColumns]);
 
   const analyticsProjectData = useMemo(() => {
-    return projectData.filter(p => !hiddenAnalyticsProjects.includes(p.project_code));
-  }, [projectData, hiddenAnalyticsProjects]);
+    let data = projectData.filter(p => !hiddenAnalyticsProjects.includes(p.project_code));
+
+    data.sort((a, b) => {
+      const isWa = /^W-/i.test(a.project_code || '');
+      const isWb = /^W-/i.test(b.project_code || '');
+
+      switch (projectSortOrder) {
+        case 'default':
+          if (isWa && !isWb) return -1;
+          if (!isWa && isWb) return 1;
+          return String(a.project_code || '').localeCompare(String(b.project_code || ''));
+        case 'code-asc':
+          return String(a.project_code || '').localeCompare(String(b.project_code || ''));
+        case 'code-desc':
+          return String(b.project_code || '').localeCompare(String(a.project_code || ''));
+        case 'name-asc':
+          return String(a.project_name || '').localeCompare(String(b.project_name || ''));
+        case 'amount-desc':
+          return (b.TCC || 0) - (a.TCC || 0);
+        case 'amount-asc':
+          return (a.TCC || 0) - (b.TCC || 0);
+        case 'addl-desc':
+          return (b.TAW || 0) - (a.TAW || 0);
+        default:
+          return 0;
+      }
+    });
+
+    return data;
+  }, [projectData, hiddenAnalyticsProjects, projectSortOrder]);
 
   // ================================================================
   // MONTHLY TABLE ROWS
@@ -1233,6 +1284,37 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       </div>
                     </div>
                   )}
+
+                  {/* SORT BY DROPDOWN */}
+                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm relative" ref={sortDropdownRef}>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Sort By</span>
+                    <div 
+                      className="flex items-center gap-1 cursor-pointer"
+                      onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                    >
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200 select-none">
+                        {SORT_OPTIONS.find(o => o.value === projectSortOrder)?.label}
+                      </span>
+                      <ChevronDown size={14} className={`text-slate-400 transition-transform ${isSortDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
+
+                    {isSortDropdownOpen && (
+                      <div className="absolute top-[calc(100%+0.5rem)] right-0 w-[300px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-[100] overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                        {SORT_OPTIONS.map(opt => (
+                          <div 
+                            key={opt.value}
+                            className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${projectSortOrder === opt.value ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                            onClick={() => {
+                              setProjectSortOrder(opt.value);
+                              setIsSortDropdownOpen(false);
+                            }}
+                          >
+                            {opt.label}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   {/* EXCEL EXPORT (STYLED) */}
                   <button onClick={downloadProjectExcel} disabled={isExportingExcel}

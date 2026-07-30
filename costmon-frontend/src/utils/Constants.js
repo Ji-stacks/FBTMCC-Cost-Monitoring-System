@@ -1,5 +1,5 @@
 
-export const SERVER_IP = import.meta.env.VITE_SERVER_IP || 'localhost';
+export const SERVER_IP = import.meta.env.VITE_SERVER_IP || window.location.hostname;
 
 export const API_URL = `http://${SERVER_IP}:3001/api`;
 
