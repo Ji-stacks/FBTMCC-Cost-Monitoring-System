@@ -1881,7 +1881,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                             <td className="p-3 text-right font-mono font-bold text-purple-600 dark:text-purple-400 bg-purple-50/20 dark:bg-purple-900/5 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EQ_30_OH)}</td>
                             <td className="p-3 text-right font-mono font-bold text-rose-500 bg-rose-50/20 dark:bg-rose-900/5 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EQ_10_RETENTION)}</td>
                             <td className="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200 border-r border-indigo-100 dark:border-indigo-800/50">{fmt(row.EFFECTIVE_OH)}</td>
-                            <td className="p-3 text-center border-r border-indigo-200 dark:border-indigo-800">{dash}</td>
+                            <td className="p-3 text-right font-mono font-black text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/50 border-r border-indigo-200 dark:border-indigo-800">{fmt(row.EFFECTIVE_OH)}</td>
 
                             {/* ── Dynamic Expense cols (OFFICE/PAYATAS/RESIDENCE aggregated) ── */}
                             {customColumns.map((col, idx) => {

@@ -2288,7 +2288,7 @@ app.post('/api/office-ledger/export-styled', authenticateToken, async (req, res)
           fmtNum(row.EQ_30_OH),
           fmtNum(row.EQ_10_RETENTION),
           fmtNum(row.EFFECTIVE_OH),
-          fmtNum(row.TCC),
+          '',
           ...customColumns.map(() => '—'),
           '—',
           fmtNum(row.NET_PROFIT)
@@ -2320,7 +2320,7 @@ app.post('/api/office-ledger/export-styled', authenticateToken, async (req, res)
           fmtNum(row.EQ_30_OH),
           fmtNum(row.EQ_10_RETENTION),
           fmtNum(row.EFFECTIVE_OH),
-          fmtNum(row.TCC),
+          fmtNum(row.EFFECTIVE_OH),
           ...customColumns.map(col => fmtNum(row[col.id])),
           fmtNum(row.total_specific_expenses),
           fmtNum(row.NET_PROFIT)
@@ -2362,7 +2362,7 @@ app.post('/api/office-ledger/export-styled', authenticateToken, async (req, res)
       fmtNum(grandTotals.EQ_30_OH),
       fmtNum(grandTotals.EQ_10_RETENTION),
       fmtNum(grandTotals.EFFECTIVE_OH),
-      fmtNum(grandTotals.TCC),
+      '',
       ...customColumns.map(col => fmtNum(grandTotals[col.id])),
       fmtNum(grandTotals.total_specific_expenses),
       fmtNum(grandTotals.NET_PROFIT)
