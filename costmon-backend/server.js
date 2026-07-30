@@ -2158,6 +2158,256 @@ app.get('/api/office-ledger/export', authenticateToken, async (req, res) => {
 });
 
 // ==========================================
+// POST /api/office-ledger/export-styled
+// Receives dynamically sorted monthlyTableRows array from frontend
+// ==========================================
+app.post('/api/office-ledger/export-styled', authenticateToken, async (req, res) => {
+  try {
+    const { monthlyTableRows, customColumns, yearLabel, grandTotals } = req.body;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'FBTMCC Cost Monitoring System';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Monthly Master Ledger', {
+      pageSetup: { paperSize: 9, orientation: 'landscape' }
+    });
+
+    const INDIGO = 'FF3730A3';
+    const AMBER_LIGHT = 'FFFFF3CD';
+    const SLATE_LIGHT = 'FFF1F5F9';
+    const GRAND_BG = 'FF312E81';
+    const WHITE = 'FFFFFFFF';
+    const GRAY_BORDER = 'FFD1D5DB';
+    const DARK_TEXT = 'FF1E293B';
+
+    const thinBorder = {
+      top: { style: 'thin', color: { argb: GRAY_BORDER } },
+      left: { style: 'thin', color: { argb: GRAY_BORDER } },
+      bottom: { style: 'thin', color: { argb: GRAY_BORDER } },
+      right: { style: 'thin', color: { argb: GRAY_BORDER } }
+    };
+    const mediumBorder = {
+      top: { style: 'medium', color: { argb: INDIGO } },
+      left: { style: 'medium', color: { argb: INDIGO } },
+      bottom: { style: 'medium', color: { argb: INDIGO } },
+      right: { style: 'medium', color: { argb: INDIGO } }
+    };
+
+    const fixedColCount = 9;
+    const dynamicColCount = customColumns.length;
+    const totalCols = fixedColCount + dynamicColCount + 2;
+
+    const colDefs = [
+      { key: 'date', width: 9 },
+      { key: 'code', width: 12 },
+      { key: 'TCC', width: 12 },
+      { key: 'CONTRACT_WO_VAT', width: 12 },
+      { key: 'CWOV_OH_PM', width: 12 },
+      { key: 'EQ_30_OH', width: 12 },
+      { key: 'EQ_10_RET', width: 12 },
+      { key: 'EFFECTIVE_OH', width: 12 },
+      { key: 'TOTAL_EOC', width: 12 },
+      ...customColumns.map(col => ({ key: col.id, width: 11 })),
+      { key: 'total_exp', width: 12 },
+      { key: 'net_profit', width: 12 },
+    ];
+
+    colDefs.forEach((col, i) => {
+      const c = sheet.getColumn(i + 1);
+      c.key = col.key;
+      c.width = col.width;
+    });
+
+    const title1 = sheet.addRow(['FBTMCC — MONTHLY UNIFIED MASTER LEDGER']);
+    sheet.mergeCells(`A1:${sheet.getColumn(totalCols).letter}1`);
+    title1.getCell(1).font = { bold: true, size: 14, color: { argb: INDIGO }, name: 'Calibri' };
+    title1.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    title1.height = 24;
+
+    const title2 = sheet.addRow([yearLabel]);
+    sheet.mergeCells(`A2:${sheet.getColumn(totalCols).letter}2`);
+    title2.getCell(1).font = { italic: true, size: 11, color: { argb: 'FF64748B' }, name: 'Calibri' };
+    title2.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    title2.height = 16;
+
+    sheet.addRow([]);
+
+    const headerLabels = [
+      'Date', 'Code', "Contract plus Add'l w/ VAT", 'Contract w/o Vat',
+      'Contract w/o Vat & Overhead & PM', 'Equivalent 30% Overhead, Contingency & PM',
+      'Equivalent 10% Retention base on Contract w/ Vat', 'Effective Overhead', 'Total EOC per Month',
+      ...customColumns.map(col => col.title),
+      'Total', 'Net Profit'
+    ];
+
+    const headerRow = sheet.addRow(headerLabels);
+    headerRow.eachCell({ includeEmpty: true }, cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INDIGO } };
+      cell.font = { bold: true, color: { argb: WHITE }, size: 10, name: 'Calibri' };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = mediumBorder;
+    });
+    headerRow.height = 44;
+    headerRow.commit();
+
+    sheet.views = [{ state: 'frozen', ySplit: 4 }];
+
+    const MONEY_FMT = '#,##0.00';
+    const fmtNum = (v) => (v === null || v === undefined || v === '') ? '' : v;
+
+    let projectIdx = 0; 
+
+    monthlyTableRows.forEach((row) => {
+      if (row.rowType === 'month_header') {
+        const mhRow = sheet.addRow([row.monthLabel]);
+        sheet.mergeCells(`A${mhRow.number}:${sheet.getColumn(totalCols).letter}${mhRow.number}`);
+        mhRow.getCell(1).value = row.monthLabel;
+        mhRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AMBER_LIGHT } };
+        mhRow.getCell(1).font = { bold: true, size: 11, color: { argb: 'FF78350F' }, name: 'Calibri' };
+        mhRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        mhRow.getCell(1).border = {
+          top: { style: 'medium', color: { argb: 'FFFFFBEB' } },
+          bottom: { style: 'thin', color: { argb: GRAY_BORDER } },
+          left: { style: 'thin', color: { argb: GRAY_BORDER } },
+          right: { style: 'thin', color: { argb: GRAY_BORDER } }
+        };
+        mhRow.height = 20;
+        mhRow.commit();
+        projectIdx = 0; 
+      } else if (row.rowType === 'project') {
+        const rowFill = projectIdx % 2 === 0 ? WHITE : 'FFF8FAFC';
+        projectIdx++;
+
+        const values = [
+          '',
+          row.project_code,
+          fmtNum(row.TCC),
+          fmtNum(row.CONTRACT_WO_VAT),
+          fmtNum(row.CONTRACT_WO_VAT_OH_PM),
+          fmtNum(row.EQ_30_OH),
+          fmtNum(row.EQ_10_RETENTION),
+          fmtNum(row.EFFECTIVE_OH),
+          fmtNum(row.TCC),
+          ...customColumns.map(() => '—'),
+          '—',
+          fmtNum(row.NET_PROFIT)
+        ];
+
+        const dr = sheet.addRow(values);
+        dr.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          const isNumericCol = colNumber >= 3;
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowFill } };
+          cell.font = { name: 'Calibri', size: 10, color: { argb: DARK_TEXT } };
+          cell.alignment = { vertical: 'middle', wrapText: false };
+          cell.border = thinBorder;
+          if (isNumericCol && typeof cell.value === 'number') {
+            cell.numFmt = MONEY_FMT;
+          }
+          if (colNumber === 2) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          }
+        });
+        dr.height = 18;
+        dr.commit();
+      } else if (row.rowType === 'monthly_total') {
+        const mtValues = [
+          '',
+          'MONTHLY TOTAL',
+          fmtNum(row.TCC),
+          fmtNum(row.CONTRACT_WO_VAT),
+          fmtNum(row.CONTRACT_WO_VAT_OH_PM),
+          fmtNum(row.EQ_30_OH),
+          fmtNum(row.EQ_10_RETENTION),
+          fmtNum(row.EFFECTIVE_OH),
+          fmtNum(row.TCC),
+          ...customColumns.map(col => fmtNum(row[col.id])),
+          fmtNum(row.total_specific_expenses),
+          fmtNum(row.NET_PROFIT)
+        ];
+
+        const mtRow = sheet.addRow(mtValues);
+        mtRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SLATE_LIGHT } };
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: DARK_TEXT } };
+          cell.alignment = { vertical: 'middle', wrapText: false };
+          cell.border = {
+            top: { style: 'thin', color: { argb: '99AAAAAA' } },
+            bottom: { style: 'medium', color: { argb: 'FF94A3B8' } },
+            left: { style: 'thin', color: { argb: GRAY_BORDER } },
+            right: { style: 'thin', color: { argb: GRAY_BORDER } }
+          };
+          if (colNumber >= 3 && typeof cell.value === 'number') {
+            cell.numFmt = MONEY_FMT;
+          }
+          if (colNumber === 2) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+            cell.font = { ...cell.font, color: { argb: 'FF475569' }, italic: true };
+          }
+        });
+        mtRow.height = 20;
+        mtRow.commit();
+      }
+    });
+
+    const spacerRow = sheet.addRow([]);
+    spacerRow.commit();
+
+    const gtValues = [
+      '',
+      'TOTAL',
+      fmtNum(grandTotals.TCC),
+      fmtNum(grandTotals.CONTRACT_WO_VAT),
+      fmtNum(grandTotals.CONTRACT_WO_VAT_OH_PM),
+      fmtNum(grandTotals.EQ_30_OH),
+      fmtNum(grandTotals.EQ_10_RETENTION),
+      fmtNum(grandTotals.EFFECTIVE_OH),
+      fmtNum(grandTotals.TCC),
+      ...customColumns.map(col => fmtNum(grandTotals[col.id])),
+      fmtNum(grandTotals.total_specific_expenses),
+      fmtNum(grandTotals.NET_PROFIT)
+    ];
+
+    const gtRow = sheet.addRow(gtValues);
+    gtRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRAND_BG } };
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: WHITE } };
+      cell.border = {
+        top: { style: 'medium', color: { argb: GRAND_BG } },
+        bottom: { style: 'medium', color: { argb: GRAND_BG } },
+        left: { style: 'medium', color: { argb: GRAND_BG } },
+        right: { style: 'medium', color: { argb: GRAND_BG } }
+      };
+      cell.alignment = { vertical: 'middle', wrapText: false };
+      if (colNumber >= 3 && typeof cell.value === 'number') {
+        cell.numFmt = MONEY_FMT;
+      }
+      if (colNumber === 2) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+      }
+    });
+    gtRow.height = 24;
+    gtRow.commit();
+
+    const filename = generateExportFilename(`MONTHLY_MASTER_LEDGER_STYLED`);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+    logActivity(req.user.username, 'EXPORT_OFFICE_LEDGER', 'office_ledger', 'excel', `Exported Monthly Master Ledger (Styled)`);
+
+  } catch (err) {
+    console.error('Office Ledger export error:', err.message, err.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate Office Ledger Excel file.' });
+    }
+  }
+});
+
+// ==========================================
 // EXPORT PROJECT MASTER SPREADSHEET (STYLED)
 // ==========================================
 app.post('/api/project-ledger/export-styled', authenticateToken, async (req, res) => {

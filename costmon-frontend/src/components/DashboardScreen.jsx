@@ -18,6 +18,8 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   const [activeView, setActiveView] = useState('selection');
   const [projectSortOrder, setProjectSortOrder] = useState('default');
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+  const [officeSortOrder, setOfficeSortOrder] = useState('default');
+  const [isOfficeSortDropdownOpen, setIsOfficeSortDropdownOpen] = useState(false);
 
   // --- DYNAMIC OPR CONFIGURATION STATES ---
   const [overheadProjects, setOverheadProjects] = useState(['OFFICE', 'PAYATAS', 'RESIDENCE']);
@@ -161,11 +163,15 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   const projectTableRef = useRef(null);
   const officeTableRef = useRef(null); // Ref para sa Office Table
   const sortDropdownRef = useRef(null);
+  const officeSortDropdownRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) {
         setIsSortDropdownOpen(false);
+      }
+      if (officeSortDropdownRef.current && !officeSortDropdownRef.current.contains(event.target)) {
+        setIsOfficeSortDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -360,17 +366,21 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
     try {
       setIsExportingOfficeExcel(true);
 
-      const params = new URLSearchParams({
-        year: officeYear,
-        overheadProjects: overheadProjects.join(','),
-        customColumns: JSON.stringify(customColumns),
-        hiddenProjects: JSON.stringify(hiddenProjects),
-        hiddenMonths: JSON.stringify(hiddenMonths)
-      });
+      const payload = {
+        monthlyTableRows,
+        customColumns,
+        yearLabel: officeYear === 'All' ? 'All Records' : `Year: ${officeYear}`,
+        grandTotals
+      };
 
       const token = sessionStorage.getItem('fbtmcc_token');
-      const response = await fetch(`${API_URL}/office-ledger/export?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch(`${API_URL}/office-ledger/export-styled`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -856,6 +866,32 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
         return projectMk === mk && !hiddenProjects.includes(p.project_code);
       });
 
+      projs.sort((a, b) => {
+        const isWa = /^W-/i.test(a.project_code || '');
+        const isWb = /^W-/i.test(b.project_code || '');
+
+        switch (officeSortOrder) {
+          case 'default':
+            if (isWa && !isWb) return -1;
+            if (!isWa && isWb) return 1;
+            return String(a.project_code || '').localeCompare(String(b.project_code || ''));
+          case 'code-asc':
+            return String(a.project_code || '').localeCompare(String(b.project_code || ''));
+          case 'code-desc':
+            return String(b.project_code || '').localeCompare(String(a.project_code || ''));
+          case 'name-asc':
+            return String(a.project_name || '').localeCompare(String(b.project_name || ''));
+          case 'amount-desc':
+            return (b.TCC || 0) - (a.TCC || 0);
+          case 'amount-asc':
+            return (a.TCC || 0) - (b.TCC || 0);
+          case 'addl-desc':
+            return (b.TAW || 0) - (a.TAW || 0);
+          default:
+            return 0;
+        }
+      });
+
       const exps = expsByMonth[mk] || {};
       const monthLabel = label;
 
@@ -922,7 +958,7 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
     });
 
     return rows;
-  }, [projectData, filteredDisbursements, overheadProjects, customColumns, officeYear, hiddenProjects, hiddenMonths]);
+  }, [projectData, filteredDisbursements, overheadProjects, customColumns, officeYear, hiddenProjects, hiddenMonths, officeSortOrder]);
 
   const grandTotals = useMemo(() => {
     const totals = {
@@ -1632,6 +1668,37 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       </div>
                     </div>
                   )}
+
+                  {/* SORT BY DROPDOWN */}
+                  <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 shadow-sm relative" ref={officeSortDropdownRef}>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Sort By</span>
+                    <div 
+                      className="flex items-center gap-1 cursor-pointer"
+                      onClick={() => setIsOfficeSortDropdownOpen(!isOfficeSortDropdownOpen)}
+                    >
+                      <span className="text-sm font-bold text-white select-none">
+                        {SORT_OPTIONS.find(o => o.value === officeSortOrder)?.label}
+                      </span>
+                      <ChevronDown size={14} className={`text-white/60 transition-transform ${isOfficeSortDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
+
+                    {isOfficeSortDropdownOpen && (
+                      <div className="absolute top-[calc(100%+0.5rem)] right-0 w-[300px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-[100] overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                        {SORT_OPTIONS.map(opt => (
+                          <div 
+                            key={opt.value}
+                            className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${officeSortOrder === opt.value ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                            onClick={() => {
+                              setOfficeSortOrder(opt.value);
+                              setIsOfficeSortDropdownOpen(false);
+                            }}
+                          >
+                            {opt.label}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   {/* ISOLATED OFFICE YEAR FILTER */}
                   <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-xl border border-white/20">
