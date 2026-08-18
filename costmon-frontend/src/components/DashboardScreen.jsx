@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
-import { LayoutDashboard, Briefcase, Building2, ArrowLeft, TrendingUp, FileText, ZoomIn, ZoomOut, RotateCcw, Wallet, Receipt, Eye, EyeOff, Calendar, X, Download, FileSpreadsheet, BarChart2, PieChart as PieChartIcon, Settings, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Building2, ArrowLeft, TrendingUp, FileText, ZoomIn, ZoomOut, RotateCcw, Wallet, Receipt, Eye, EyeOff, Calendar, X, Download, FileSpreadsheet, BarChart2, PieChart as PieChartIcon, Settings, ChevronDown, Plus } from 'lucide-react';
 import { API_URL } from '../utils/Constants';
 import { generateFilename } from '../utils/exportUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line } from 'recharts';
@@ -36,6 +36,8 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
   ]);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [editingColumn, setEditingColumn] = useState(null);
+  const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
+  const [newColumnTitle, setNewColumnTitle] = useState('');
 
   // Hidden Projects State
   const [hiddenProjects, setHiddenProjects] = useState([]);
@@ -72,6 +74,32 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
     const updated = customColumns.map(col => col.id === editingColumn.id ? editingColumn : col);
     setCustomColumns(updated);
     setIsColumnModalOpen(false);
+
+    const token = sessionStorage.getItem('fbtmcc_token');
+    if (token) {
+      fetch(`${API_URL}/users/preferences`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dashboard_custom_columns: updated })
+      }).catch(console.error);
+    }
+  };
+
+  const handleAddColumn = async () => {
+    if (userRole === 'engineer') return;
+    if (!newColumnTitle.trim()) return;
+
+    const newColId = 'col_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const newCol = {
+      id: newColId,
+      title: newColumnTitle.trim(),
+      mappedCategories: []
+    };
+
+    const updated = [...customColumns, newCol];
+    setCustomColumns(updated);
+    setIsAddColumnModalOpen(false);
+    setNewColumnTitle('');
 
     const token = sessionStorage.getItem('fbtmcc_token');
     if (token) {
@@ -1781,8 +1809,17 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                       <th colSpan={7} className="p-2 text-center bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border-r border-indigo-200 dark:border-indigo-800">
                         ◆ Contract Formula Columns
                       </th>
-                      <th colSpan={customColumns.length} className="p-2 text-center bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-r border-amber-200 dark:border-amber-700">
+                      <th colSpan={customColumns.length} className="p-2 text-center bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-r border-amber-200 dark:border-amber-700 relative group">
                         ◆ Office / Payatas / Residence Expenses
+                        {userRole !== 'engineer' && (
+                          <button
+                            onClick={() => setIsAddColumnModalOpen(true)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-200 hover:bg-amber-300 dark:text-amber-200 dark:bg-amber-800 dark:hover:bg-amber-700 rounded-lg transition-all shadow-md active:scale-95"
+                            title="Add New Column"
+                          >
+                            <Plus size={16} /> Add Column
+                          </button>
+                        )}
                       </th>
                       <th colSpan={2} className="p-2 text-center bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">Summary</th>
                     </tr>
@@ -2104,6 +2141,52 @@ export default function DashboardScreen({ projects = [], disbursements = [], cat
                 className="px-6 py-2 font-bold text-sm text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Column Modal */}
+      {isAddColumnModalOpen && userRole !== 'engineer' && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-amber-50/50 dark:bg-amber-900/10">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                <Plus size={18} className="text-amber-600" /> Add Custom Column
+              </h3>
+              <button onClick={() => setIsAddColumnModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Column Title</label>
+                <input
+                  type="text"
+                  value={newColumnTitle}
+                  onChange={(e) => setNewColumnTitle(e.target.value)}
+                  placeholder="e.g. New Expense Category"
+                  className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm font-medium dark:text-white"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-3">
+              <button
+                onClick={() => setIsAddColumnModalOpen(false)}
+                className="px-5 py-2 font-bold text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddColumn}
+                disabled={!newColumnTitle.trim()}
+                className="px-6 py-2 font-bold text-sm text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save Column
               </button>
             </div>
           </div>
