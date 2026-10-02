@@ -925,6 +925,8 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
       let totalCrCIB = 0;
       let totalCrEWT = 0;
 
+      let totalStocks = 0;
+
       processedRows.forEach(row => {
         totalDrGross += parseFloat(row.gross_amount) || 0;
         const isCreditCard = row.project_code && row.project_code.toLowerCase() === 'credit card';
@@ -933,6 +935,7 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
         // Combine CIB and Accts Pay
         totalCrCIB += (isCreditCard ? 0 : originalNet) + originalAcctsPay;
         totalCrEWT += parseFloat(row.ewt_amount) || 0;
+        totalStocks += parseFloat(row.stocks_amount) || 0;
       });
 
       // Format Date String
@@ -955,8 +958,8 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
       }
 
       // Add Summary Rows (Rows 1 to 5)
-      const sumR1 = sheet.addRow(['FBT MARKETING AND CONSTR', '', '', 'Dr', 'Cr']);
-      const sumR2 = sheet.addRow(['Summary of Disbursement', '', '', totalDrGross, totalCrCIB]);
+      const sumR1 = sheet.addRow(['FBT MARKETING AND CONSTR', '', '', 'Dr', 'Cr', 'Stocks']);
+      const sumR2 = sheet.addRow(['Summary of Disbursement', '', '', totalDrGross, totalCrCIB, totalStocks > 0 ? totalStocks : null]);
       const sumR3 = sheet.addRow([dateString, '', '', null, transactionFilter === 'EWT' ? totalCrEWT : (totalCrEWT > 0 ? totalCrEWT : null)]);
       const sumR4 = sheet.addRow(['', '', '', totalDrGross, totalCrCIB + totalCrEWT]);
       sheet.addRow([]); // Empty row 5
@@ -966,12 +969,15 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
         r.getCell(1).font = { bold: true, name: 'Calibri', size: 11 };
         r.getCell(4).numFmt = '#,##0.00';
         r.getCell(5).numFmt = '#,##0.00';
+        r.getCell(6).numFmt = '#,##0.00';
       });
 
       sumR1.getCell(4).font = { bold: true, color: { argb: 'FF2563EB' } };
       sumR1.getCell(5).font = { bold: true, color: { argb: 'FF2563EB' } };
+      sumR1.getCell(6).font = { bold: true, color: { argb: 'FF2563EB' } };
       sumR1.getCell(4).alignment = { horizontal: 'center' };
       sumR1.getCell(5).alignment = { horizontal: 'center' };
+      sumR1.getCell(6).alignment = { horizontal: 'center' };
 
       sumR3.getCell(5).border = { bottom: { style: 'thin' } };
       sumR4.getCell(4).border = { top: { style: 'thin' }, bottom: { style: 'double' } };
@@ -1066,6 +1072,12 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
         let cib = isCreditCard ? 0 : originalNet;
         let finalAcctsPay = originalAcctsPay;
 
+        let displayProject = row.project_code || '';
+        let stocksAmt = parseFloat(row.stocks_amount) || 0;
+        if ((!displayProject || displayProject.trim() === '') && stocksAmt > 0) {
+          displayProject = 'STOCKS';
+        }
+
         let rowData = {};
 
         if (transactionFilter === 'EWT') {
@@ -1079,7 +1091,7 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
             date: row.date || '',
             payee: row.payee || '',
             cv_no: row.cv_no ? `#${row.cv_no}` : '',
-            project: row.project_code || '',
+            project: displayProject,
             gross: grossAmount,
             ewt: ewtAmount,
             labor_payroll: laborAmount,
@@ -1090,7 +1102,7 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
             date: row.date || '',
             payee: row.payee || '',
             cv_no: row.cv_no ? `#${row.cv_no}` : '',
-            project: row.project_code || '',
+            project: displayProject,
             gross: grossAmount,
             cib: cib,
             accts_pay: finalAcctsPay,
