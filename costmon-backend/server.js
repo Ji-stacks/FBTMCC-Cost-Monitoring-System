@@ -931,7 +931,7 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
         const originalNet = parseFloat(row.net_amount) || 0;
         const originalAcctsPay = parseFloat(row.accts_pay) || 0;
         // Combine CIB and Accts Pay
-        totalCrCIB += (isCreditCard ? 0 : originalNet) + (isCreditCard ? (originalAcctsPay + originalNet) : originalAcctsPay);
+        totalCrCIB += (isCreditCard ? 0 : originalNet) + originalAcctsPay;
         totalCrEWT += parseFloat(row.ewt_amount) || 0;
       });
 
@@ -1064,7 +1064,7 @@ app.get('/api/disbursements/export', authenticateToken, async (req, res) => {
         let ewtAmount = parseFloat(row.ewt_amount) || 0;
 
         let cib = isCreditCard ? 0 : originalNet;
-        let finalAcctsPay = isCreditCard ? (originalAcctsPay + originalNet) : originalAcctsPay;
+        let finalAcctsPay = originalAcctsPay;
 
         let rowData = {};
 
